@@ -1,0 +1,16 @@
+[Unit]
+Description=GeoShift autossh — SOCKS5 US exit (127.0.0.1:1080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jackylam
+Group=jackylam
+Environment=GEOSHIFT_ENV_FILE=/etc/geoshift/geoshift.env
+ExecStart=/usr/local/lib/geoshift/tunnel-us.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=GeoShift Mihomo (TUN, rule-based routing)
+After=network-online.target geoshift-tunnel-us.service
+Requires=geoshift-tunnel-us.service
+
+[Service]
+Type=simple
+User=jackylam
+Group=jackylam
+Environment=GEOSHIFT_ENV_FILE=/etc/geoshift/geoshift.env
+ExecStart=/usr/local/lib/geoshift/mihomo-run.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

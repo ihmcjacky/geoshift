@@ -1,0 +1,8 @@
+# Local secrets (IPs, SSH key path, optional overrides) — never commit
+geoshift.env
+
+# GeoIP databases downloaded by Mihomo into the config directory on first run
+config/*.mmdb
+config/Country.mmdb
+config/geoip.metadb
+config/cache.db

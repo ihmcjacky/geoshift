@@ -1,0 +1,107 @@
+# GeoShift — Mihomo (US exit only). Upstream: SOCKS5 127.0.0.1:1080 (autossh → Lightsail).
+# Dashboard / API: external-controller binds 127.0.0.1:9090 only (not reachable from LAN/internet).
+
+mode: rule
+log-level: info
+ipv6: false
+
+# systemd-resolved often uses router DNS (bypassing Mihomo fake-IP), so apps see real IPs and
+# DOMAIN rules would never match → everything fell through to MATCH,DIRECT. Sniff TLS SNI / HTTP
+# Host so claude.ai / platform.claude.com still hit US-PROXY even when connecting by IP.
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: true
+  force-dns-mapping: true
+  sniff:
+    TLS:
+      ports: [443, 8443]
+    HTTP:
+      ports: [80, 8080-8880]
+    # HTTP/3 (QUIC) uses UDP/443; without this, browsers hit CDN IPs as DIRECT → HK IP → geo block.
+    QUIC:
+      ports: [443]
+
+# REST API + web UI (http://127.0.0.1:9090/ui). Localhost-only; safe default firewall.
+external-controller: 127.0.0.1:9090
+# Optional UI: open https://yacd.metacubex.one/?hostname=127.0.0.1&port=9090 (localhost API)
+
+port: 7890
+socks-port: 7891
+allow-lan: false
+
+proxies:
+  - name: US-Lightsail
+    type: socks5
+    server: 127.0.0.1
+    port: 1080
+    udp: true
+
+proxy-groups:
+  - name: US-PROXY
+    type: select
+    proxies:
+      - US-Lightsail
+      - DIRECT
+
+# Domain list: keep in sync with rules/us-ai.txt (annotated copy in rules/us-ai.yaml).
+rules:
+  - DOMAIN-SUFFIX,anthropic.com,US-PROXY
+  - DOMAIN-SUFFIX,claude.ai,US-PROXY
+  - DOMAIN-SUFFIX,claude.com,US-PROXY
+  - DOMAIN-SUFFIX,claudeusercontent.com,US-PROXY
+  - DOMAIN-SUFFIX,anthropicusercontent.com,US-PROXY
+  - DOMAIN-SUFFIX,intercom.io,US-PROXY
+  - DOMAIN-SUFFIX,intercomcdn.com,US-PROXY
+  - DOMAIN-SUFFIX,statsig.com,US-PROXY
+  - DOMAIN-SUFFIX,statsigapi.net,US-PROXY
+  - DOMAIN,api.statsig.com,US-PROXY
+  - DOMAIN-SUFFIX,featuregates.org,US-PROXY
+  - DOMAIN-SUFFIX,openai.com,US-PROXY
+  - DOMAIN-SUFFIX,chatgpt.com,US-PROXY
+  - DOMAIN-SUFFIX,oaistatic.com,US-PROXY
+  - DOMAIN-SUFFIX,oaiusercontent.com,US-PROXY
+  - DOMAIN-SUFFIX,openaiapi-site.azureedge.net,US-PROXY
+  - DOMAIN-SUFFIX,ai.google.dev,US-PROXY
+  - DOMAIN-SUFFIX,gemini.google.com,US-PROXY
+  - DOMAIN-SUFFIX,aistudio.google.com,US-PROXY
+  # Google NotebookLM (consumer web + Discovery Engine–style APIs)
+  - DOMAIN-SUFFIX,notebooklm.google,US-PROXY
+  - DOMAIN-SUFFIX,notebooklm.google.com,US-PROXY
+  - DOMAIN-SUFFIX,discoveryengine.googleapis.com,US-PROXY
+  # Google OAuth / IDE surfaces used alongside Claude (were DIRECT in yacd)
+  - DOMAIN-SUFFIX,oauth2.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,cloudcode-pa.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,clients6.google.com,US-PROXY
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,aisandbox-pa.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,aiplatform.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com,US-PROXY
+  - DOMAIN-SUFFIX,deepmind.com,US-PROXY
+  - DOMAIN-SUFFIX,deepmind.google,US-PROXY
+  - MATCH,DIRECT
+
+tun:
+  enable: true
+  stack: mixed
+  auto-route: true
+  auto-detect-interface: true
+  mtu: 1500
+  strict-route: false
+  dns-hijack:
+    - any:53
+
+dns:
+  enable: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://8.8.8.8/dns-query
+    - https://1.1.1.1/dns-query
+  fallback:
+    - 114.114.114.114
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
