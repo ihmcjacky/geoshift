@@ -23,13 +23,13 @@ function info {
     Write-Host "==> $msg" -ForegroundColor Cyan
 }
 
-# ── Step 1: Create directories ────────────────────────────────────────────────
+# -- Step 1: Create directories -----------------------------------------------
 info "Creating directories"
 @($InstallDir, $DataDir, $LogDir, $ConfigDir) | ForEach-Object {
     if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
 }
 
-# ── Step 2: Download Mihomo ───────────────────────────────────────────────────
+# -- Step 2: Download Mihomo --------------------------------------------------
 info "Downloading latest Mihomo (windows-amd64)"
 $releaseApi = 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest'
 $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing
@@ -49,7 +49,7 @@ if (-not $exeSrc) { die "mihomo.exe not found in downloaded zip" }
 Copy-Item $exeSrc.FullName -Destination $MihomoExe -Force
 Remove-Item $tmpZip, $tmpDir -Recurse -Force
 
-# ── Step 3: Download WinTun DLL ───────────────────────────────────────────────
+# -- Step 3: Download WinTun DLL ----------------------------------------------
 info "Downloading WinTun"
 $wintunUrl = 'https://www.wintun.net/builds/wintun-0.14.1.zip'
 $wintunZip = Join-Path $env:TEMP 'wintun.zip'
@@ -65,13 +65,13 @@ if (-not $dllSrc) { die "wintun.dll (amd64) not found in downloaded zip" }
 Copy-Item $dllSrc.FullName -Destination $WinTunDll -Force
 Remove-Item $wintunZip, $wintunDir -Recurse -Force
 
-# ── Step 4: Copy scripts ──────────────────────────────────────────────────────
+# -- Step 4: Copy scripts -----------------------------------------------------
 info "Copying PowerShell scripts"
 $scriptSrc = Split-Path -Parent $PSCommandPath
 Copy-Item "$scriptSrc\tunnel-us.ps1"  -Destination $InstallDir -Force
 Copy-Item "$scriptSrc\mihomo-run.ps1" -Destination $InstallDir -Force
 
-# ── Step 5: Set up env file ───────────────────────────────────────────────────
+# -- Step 5: Set up env file --------------------------------------------------
 info "Setting up env file"
 $envExample = Join-Path (Split-Path -Parent $scriptSrc) 'geoshift.env.example'
 if (-not (Test-Path $EnvFile)) {
@@ -91,7 +91,7 @@ GEOSHIFT_CONFIG_DIR=$ConfigDir
     Write-Host "  $EnvFile already exists, not overwriting"
 }
 
-# ── Step 6: Copy config if not present ───────────────────────────────────────
+# -- Step 6: Copy config if not present ---------------------------------------
 info "Checking config directory"
 $repoConfig = Join-Path (Split-Path -Parent $scriptSrc) 'config'
 if ((Test-Path $repoConfig) -and -not (Test-Path "$ConfigDir\config.yaml")) {
@@ -103,7 +103,7 @@ if ((Test-Path $repoConfig) -and -not (Test-Path "$ConfigDir\config.yaml")) {
     Write-Host "  WARNING: no config found — copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
 }
 
-# ── Step 7: Register Task Scheduler tasks (W4) ───────────────────────────────
+# -- Step 7: Register Task Scheduler tasks ------------------------------------
 info "Registering Task Scheduler tasks"
 
 $psExe = 'powershell.exe'
@@ -143,7 +143,7 @@ function Register-GeoShiftTask {
 Register-GeoShiftTask -TaskName 'GeoShift-Tunnel-US' -ScriptPath "$InstallDir\tunnel-us.ps1"
 Register-GeoShiftTask -TaskName 'GeoShift-Mihomo'    -ScriptPath "$InstallDir\mihomo-run.ps1" -DelaySeconds 10
 
-# ── Step 8: Validate Mihomo config ───────────────────────────────────────────
+# -- Step 8: Validate Mihomo config -------------------------------------------
 if (Test-Path "$ConfigDir\config.yaml") {
     info "Validating Mihomo config"
     $result = & $MihomoExe -t -d $ConfigDir 2>&1
@@ -154,7 +154,7 @@ if (Test-Path "$ConfigDir\config.yaml") {
     Write-Host "  Config OK"
 }
 
-# ── Done ──────────────────────────────────────────────────────────────────────
+# -- Done ---------------------------------------------------------------------
 Write-Host ""
 Write-Host "Installation complete." -ForegroundColor Green
 Write-Host ""
