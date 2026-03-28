@@ -613,4 +613,306 @@ dns:
 
 ---
 
+## 10. Phase 2 — Windows Platform
+
+### Overview
+
+Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule lists** as Phase 1. Only the automation layer differs: Bash/systemd is replaced by PowerShell/Task Scheduler, and `autossh` is replaced by a PowerShell reconnect loop using Windows built-in `ssh.exe`.
+
+### Component Equivalence
+
+| Linux (Phase 1) | Windows (Phase 2) | Notes |
+|---|---|---|
+| `autossh` | PowerShell reconnect loop + `ssh.exe` | `ssh.exe` ships with Windows 10/11 (OpenSSH Client optional feature) |
+| `systemd` service units | Task Scheduler tasks (SYSTEM account) | Run at boot, no UAC, no console window |
+| `install.sh` | `install.ps1` | One-shot, run as Administrator |
+| `tunnel-us.sh` | `tunnel-us.ps1` | Same SSH flags, `-D 1080` SOCKS5 |
+| `mihomo-run.sh` | `mihomo-run.ps1` | Same Mihomo binary invocation |
+| `/etc/geoshift/geoshift.env` | `C:\ProgramData\GeoShift\geoshift.env` | Same key=value format |
+| `/usr/local/lib/geoshift/` | `C:\Program Files\GeoShift\` | Scripts + mihomo.exe + wintun.dll |
+| `setcap cap_net_admin` | WinTun driver + SYSTEM privileges | TUN mode on Windows requires SYSTEM or admin |
+| `sysctl` IPv6 disable | Optional: `Disable-NetAdapterBinding` | Skipped by default to minimize system changes |
+
+### Prerequisites
+
+- Windows 10 or 11 (x86-64)
+- **OpenSSH Client** feature enabled (Settings → Apps → Optional Features → OpenSSH Client)
+- Run `install.ps1` once as **Administrator** (only needed for setup; services run as SYSTEM thereafter)
+- Your Lightsail `.pem` key readable by SYSTEM: `icacls "key.pem" /grant "SYSTEM:(R)"`
+
+### File Locations
+
+| Purpose | Path |
+|---|---|
+| Scripts + binaries | `C:\Program Files\GeoShift\` |
+| Config, env, logs | `C:\ProgramData\GeoShift\` |
+| Env file | `C:\ProgramData\GeoShift\geoshift.env` |
+| Mihomo config | `C:\ProgramData\GeoShift\config\config.yaml` |
+| Tunnel log | `C:\ProgramData\GeoShift\logs\tunnel-us.log` |
+| Mihomo wrapper log | `C:\ProgramData\GeoShift\logs\mihomo.log` |
+| Mihomo core log | `C:\ProgramData\GeoShift\logs\mihomo-core.log` |
+
+### Log Rotation
+
+Each log file is capped at **1 MB** with **1 rotated backup** (`.log.1`). Maximum ~6 MB across all log files. Rotation is size-checked before each write (tunnel/wrapper logs) or at startup (core log).
+
+### Task Scheduler Tasks
+
+Both tasks run as **SYSTEM** with highest privileges — no UAC prompts, no visible window, start at boot before user login.
+
+| Task Name | Script | Trigger | Restart |
+|---|---|---|---|
+| `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup | On failure, 5s delay, unlimited |
+| `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + 10s delay | On failure, 5s delay, unlimited |
+
+The 10s delay on `GeoShift-Mihomo` ensures the SSH tunnel is up before Mihomo starts (replaces `After=geoshift-tunnel-us.service`).
+
+### Installation Steps
+
+1. Clone the repo or copy files to a working directory
+2. Open PowerShell as **Administrator**
+3. Run: `powershell -ExecutionPolicy Bypass -File scripts\install.ps1`
+4. Edit `C:\ProgramData\GeoShift\geoshift.env` with your Lightsail IP and SSH key path
+5. Grant SYSTEM read access to your SSH key: `icacls "C:\Users\you\.ssh\lightsail.pem" /grant "SYSTEM:(R)"`
+6. Reboot (or start tasks manually from Task Scheduler / PowerShell)
+
+### Verification
+
+Follow these steps **after installation and configuration** to verify GeoShift is working on Windows 11:
+
+#### Step 1: Verify Installer Completed Successfully
+
+```powershell
+# Check that directories were created
+Test-Path 'C:\Program Files\GeoShift'
+Test-Path 'C:\ProgramData\GeoShift'
+Test-Path 'C:\ProgramData\GeoShift\logs'
+
+# Check that binaries were downloaded
+Get-ChildItem 'C:\Program Files\GeoShift' | Select-Object Name
+# Expected: mihomo.exe, wintun.dll, tunnel-us.ps1, mihomo-run.ps1
+```
+
+**Expected output:** All paths exist, four files listed.
+
+**If failed:** Re-run `install.ps1` as Administrator and check for error messages.
+
+---
+
+#### Step 2: Verify Config and Environment
+
+```powershell
+# Check env file exists and has content
+Get-Content 'C:\ProgramData\GeoShift\geoshift.env'
+
+# Verify config.yaml is present
+Get-ChildItem 'C:\ProgramData\GeoShift\config' -Filter '*.yaml'
+```
+
+**Expected output:**
+- Env file shows `US_LIGHTSAIL_IP=...`, `SSH_PRIVATE_KEY=...`, etc. (not placeholder values)
+- `config.yaml` and rule files are listed
+
+**If failed:**
+- Edit `C:\ProgramData\GeoShift\geoshift.env` and fill in real values
+- Copy `config/` from your repo to `C:\ProgramData\GeoShift\config\`
+
+---
+
+#### Step 3: Verify Task Scheduler Tasks Registered
+
+```powershell
+# List GeoShift tasks
+Get-ScheduledTask -TaskName GeoShift-* | Select-Object TaskName, State
+
+# View task details
+Get-ScheduledTask -TaskName GeoShift-Tunnel-US | Get-ScheduledTaskInfo
+Get-ScheduledTask -TaskName GeoShift-Mihomo | Get-ScheduledTaskInfo
+```
+
+**Expected output:**
+- Two tasks listed: `GeoShift-Tunnel-US` and `GeoShift-Mihomo`, both with `State=Ready`
+- Task info shows no recent failures (NextRunTime in future, LastTaskResult = 0)
+
+**If failed:**
+- Tasks may not be registered: re-run `install.ps1` as Administrator
+- Tasks may have failed: check logs (Step 7 below)
+
+---
+
+#### Step 4: Grant SYSTEM Access to SSH Key
+
+```powershell
+# List your SSH key files
+Get-ChildItem 'C:\Users\' -Recurse -Filter '*.pem' -ErrorAction SilentlyContinue
+
+# Grant SYSTEM read access (replace path as needed)
+icacls 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem' /grant 'SYSTEM:(R)'
+
+# Verify permissions
+icacls 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem'
+```
+
+**Expected output:** `SYSTEM` appears in the ACL with `(R)` (Read) permission.
+
+**If failed:** The SSH tunnel will fail. Ensure the `.pem` file path is correct and SYSTEM has read access.
+
+---
+
+#### Step 5: Start Services Manually (Without Reboot)
+
+Open PowerShell **as Administrator** and run:
+
+```powershell
+# Start tunnel first
+Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-Sleep -Seconds 3
+
+# Start Mihomo (waits 10s by default, but may start immediately if manual)
+Start-ScheduledTask -TaskName GeoShift-Mihomo
+Start-Sleep -Seconds 5
+
+# Check if processes are running
+Get-Process | Where-Object { $_.Name -match 'ssh|mihomo' }
+```
+
+**Expected output:** `ssh.exe` and `mihomo.exe` processes listed.
+
+**If no processes:** Check logs (Step 7) for errors.
+
+---
+
+#### Step 6: Verify Network Access — US Exit IP
+
+```powershell
+# Test SOCKS5 tunnel on localhost:1080
+# Requires curl to be configured or a tool like netsh to route traffic
+
+# Method 1: Direct curl if it auto-detects proxy (unlikely on Windows)
+curl.exe https://ifconfig.me
+
+# Method 2: Use the Mihomo dashboard (see Step 8)
+# The dashboard shows connected clients and proxy group stats
+
+# Method 3: Configure Firefox/Chrome to use SOCKS5 proxy 127.0.0.1:1080, then visit https://ifconfig.me
+```
+
+**Expected output:** IP address should match your AWS Lightsail US instance IP (not your home ISP IP).
+
+**If you see your home ISP IP:** SSH tunnel is not running. Check logs (Step 7).
+
+---
+
+#### Step 7: Check Logs for Errors
+
+```powershell
+# View tunnel log (last 20 lines)
+Write-Host "=== Tunnel Log ==="
+Get-Content 'C:\ProgramData\GeoShift\logs\tunnel-us.log' -Tail 20
+
+# View Mihomo wrapper log
+Write-Host "=== Mihomo Wrapper Log ==="
+Get-Content 'C:\ProgramData\GeoShift\logs\mihomo.log' -Tail 20
+
+# View Mihomo core log
+Write-Host "=== Mihomo Core Log ==="
+Get-Content 'C:\ProgramData\GeoShift\logs\mihomo-core.log' -Tail 20
+```
+
+**Expected output:** Timestamps and INFO-level messages. No ERROR or FATAL messages.
+
+**Common errors:**
+- `ERROR: env file not found` → Config or env file path wrong
+- `ERROR: SSH key not found` → Path in `geoshift.env` incorrect
+- `ERROR: wintun.dll not found` → Installer failed to download WinTun
+- `ERROR: no config at ...` → Mihomo config not copied to `C:\ProgramData\GeoShift\config\`
+
+---
+
+#### Step 8: Open Mihomo Dashboard
+
+```powershell
+# Dashboard runs on localhost:9090
+# Open in your default browser:
+Start-Process 'http://127.0.0.1:9090/ui'
+```
+
+**Expected:** Dashboard loads, shows proxy groups (e.g., `US-PROXY`), and displays active connections if you make a request through the proxy.
+
+**If dashboard won't load:** Mihomo didn't start. Check logs (Step 7).
+
+---
+
+#### Step 9: Test End-to-End (Browser)
+
+1. Open Firefox or Chrome
+2. Set proxy to **SOCKS5 localhost:1080** (proxy settings or extension)
+3. Visit https://ifconfig.me → Should show **US Lightsail IP** (not your home IP)
+4. Visit https://claude.ai → Should connect successfully
+5. In Mihomo dashboard, check the "Connections" tab → Should see entries for claude.ai traffic
+
+**If blocked:**
+- Check SSH tunnel is running (`ssh.exe` in Task Manager)
+- Check Mihomo is running (`mihomo.exe` in Task Manager)
+- Check logs (Step 7)
+
+---
+
+#### Step 10: Reboot and Verify Auto-Start
+
+```powershell
+# Reboot the machine
+Restart-Computer
+
+# After reboot, log back in and verify processes started automatically
+Get-Process | Where-Object { $_.Name -match 'ssh|mihomo' }
+
+# Or check task status
+Get-ScheduledTask -TaskName GeoShift-* | Get-ScheduledTaskInfo
+```
+
+**Expected:** Both processes running automatically after boot, no prompts or visible windows.
+
+---
+
+#### Cleanup / Troubleshooting
+
+If something goes wrong and you need to reset:
+
+```powershell
+# Stop services
+Stop-ScheduledTask -TaskName GeoShift-Tunnel-US -ErrorAction SilentlyContinue
+Stop-ScheduledTask -TaskName GeoShift-Mihomo -ErrorAction SilentlyContinue
+
+# Kill processes if stuck
+Get-Process ssh, mihomo -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Clear logs (start fresh)
+Remove-Item 'C:\ProgramData\GeoShift\logs\*' -Force -ErrorAction SilentlyContinue
+
+# Re-run install.ps1 or manually start tasks again
+```
+
+### Stop / Disable
+
+```powershell
+Stop-ScheduledTask  -TaskName GeoShift-Mihomo
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
+# To disable permanently:
+Disable-ScheduledTask -TaskName GeoShift-Mihomo
+Disable-ScheduledTask -TaskName GeoShift-Tunnel-US
+```
+
+### Optional Hardening
+
+- **Disable IPv6** (if DNS or traffic leaks observed):
+  ```powershell
+  Get-NetAdapter | ForEach-Object {
+      Disable-NetAdapterBinding -Name $_.Name -ComponentID ms_tcpip6
+  }
+  ```
+  Re-enable: replace `Disable-` with `Enable-`.
+
+---
+
 *Last updated: March 2026*
