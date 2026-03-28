@@ -1,4 +1,4 @@
-# GeoShift: Launch Mihomo with the shared config directory.
+﻿# GeoShift: Launch Mihomo with the shared config directory.
 # Runs as SYSTEM via Task Scheduler. Do not run interactively unless testing.
 
 $ErrorActionPreference = 'Stop'
@@ -50,11 +50,11 @@ $env = Read-EnvFile $EnvFile
 $configDir = if ($env['GEOSHIFT_CONFIG_DIR']) { $env['GEOSHIFT_CONFIG_DIR'] } else { 'C:\ProgramData\GeoShift\config' }
 
 if (-not (Test-Path $MihomoExe)) {
-    Write-Log "ERROR: mihomo.exe not found at $MihomoExe — run install.ps1 first"
+    Write-Log "ERROR: mihomo.exe not found at $MihomoExe - run install.ps1 first"
     exit 1
 }
 if (-not (Test-Path $WinTunDll)) {
-    Write-Log "ERROR: wintun.dll not found at $WinTunDll — run install.ps1 first"
+    Write-Log "ERROR: wintun.dll not found at $WinTunDll - run install.ps1 first"
     exit 1
 }
 if (-not (Test-Path "$configDir\config.yaml")) {

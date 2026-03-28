@@ -1,4 +1,4 @@
-# GeoShift: Persistent SSH SOCKS5 tunnel to US Lightsail on localhost:1080.
+﻿# GeoShift: Persistent SSH SOCKS5 tunnel to US Lightsail on localhost:1080.
 # Runs as SYSTEM via Task Scheduler. Do not run interactively unless testing.
 
 $ErrorActionPreference = 'Stop'

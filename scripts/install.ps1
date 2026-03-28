@@ -1,4 +1,4 @@
-# GeoShift Windows Installer. Run once as Administrator.
+﻿# GeoShift Windows Installer. Run once as Administrator.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 #Requires -RunAsAdministrator
@@ -79,14 +79,14 @@ if (-not (Test-Path $EnvFile)) {
         Copy-Item $envExample -Destination $EnvFile
     } else {
         @"
-# GeoShift environment — fill in before starting services
+# GeoShift environment - fill in before starting services
 US_LIGHTSAIL_IP=your.us.lightsail.ipv4
 SSH_PRIVATE_KEY=C:\Users\$env:USERNAME\.ssh\lightsail.pem
 SSH_USER=ubuntu
 GEOSHIFT_CONFIG_DIR=$ConfigDir
 "@ | Set-Content $EnvFile
     }
-    Write-Host "  Created $EnvFile — EDIT THIS FILE before starting services" -ForegroundColor Yellow
+    Write-Host "  Created $EnvFile - EDIT THIS FILE before starting services" -ForegroundColor Yellow
 } else {
     Write-Host "  $EnvFile already exists, not overwriting"
 }
@@ -100,7 +100,7 @@ if ((Test-Path $repoConfig) -and -not (Test-Path "$ConfigDir\config.yaml")) {
 } elseif (Test-Path "$ConfigDir\config.yaml") {
     Write-Host "  Config already present at $ConfigDir"
 } else {
-    Write-Host "  WARNING: no config found — copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
+    Write-Host "  WARNING: no config found - copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
 }
 
 # -- Step 7: Register Task Scheduler tasks ------------------------------------
@@ -124,7 +124,7 @@ function Register-GeoShiftTask {
     $settings = New-ScheduledTaskSettingsSet `
         -ExecutionTimeLimit ([TimeSpan]::Zero) `
         -RestartCount 999 `
-        -RestartInterval (New-TimeSpan -Seconds 5) `
+        -RestartInterval (New-TimeSpan -Minutes 1) `
         -StartWhenAvailable
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 
@@ -149,7 +149,7 @@ if (Test-Path "$ConfigDir\config.yaml") {
     $result = & $MihomoExe -t -d $ConfigDir 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host $result
-        die "mihomo -t failed — fix config.yaml before proceeding"
+        die "mihomo -t failed - fix config.yaml before proceeding"
     }
     Write-Host "  Config OK"
 }
