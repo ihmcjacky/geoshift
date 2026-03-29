@@ -481,7 +481,7 @@ rules:
 
 **Deliverables:**
 - On **Ubuntu:** `config.yaml` tested with Mihomo in non-TUN mode first (SOCKS5 only) to validate rules
-- Proxy groups verified via Mihomo dashboard (`http://127.0.0.1:9090/ui`)
+- Proxy groups verified via Mihomo dashboard (`http://127.0.0.1:9090/ui` after `external-ui` panel is present — see repo `config/config.yaml` and Phase 2 Step 8)
 
 ---
 
@@ -595,7 +595,7 @@ dns:
 - `curl ifconfig.me` — check exit IP
 - [ipleak.net](https://ipleak.net) — check DNS leaks
 - [browserleaks.com](https://browserleaks.com) — WebRTC and DNS leak check
-- Mihomo dashboard (`http://127.0.0.1:9090/ui`) — real-time connection log to confirm rule matches
+- Mihomo dashboard (`http://127.0.0.1:9090/ui`) — real-time connection log to confirm rule matches (same `external-ui` / one-time panel fetch as in repo `config/config.yaml`; Windows walkthrough in Phase 2 Step 8)
 
 ---
 
@@ -609,6 +609,7 @@ dns:
 | SSH tunnel latency | Adds ~20-80ms RTT depending on server location | Acceptable for API calls and web browsing; not suitable for real-time voice/video |
 | Lightsail instance costs | Two instances (US + JP) at ~$3.50–$5/month each | Minimal; can share instances with other projects |
 | Rule list maintenance | New services or CDN domains may require rule additions | Use community `rule-providers` for auto-updated lists |
+| Mihomo `/ui` shows **404** | The core serves the API on `external-controller`; static files are only mounted when `external-ui` is set and populated | Repo `config.yaml` sets `external-ui` + `external-ui-url`; run once: `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:9090/upgrade/ui` (add `Authorization: Bearer …` if `secret` is set). Optional: hosted [yacd](https://yacd.metacubex.one/?hostname=127.0.0.1&port=9090) instead of local files—`external-controller-cors` exists for that case only. |
 | TLS inspection not possible | Mihomo cannot inspect encrypted traffic content; routing is domain-based only | Not a limitation for this use case; geo-unblocking only needs to route the connection, not inspect it |
 | IPv6 leak risk | Some TUN implementations may not intercept IPv6 traffic | Disable IPv6 on the machine or ensure Mihomo's TUN config covers IPv6 |
 
@@ -896,15 +897,34 @@ Get-Content 'C:\ProgramData\GeoShift\logs\mihomo-stderr.log' -Tail 30
 
 #### Step 8: Open Mihomo Dashboard
 
+Mihomo’s **REST API** listens on `http://127.0.0.1:9090`. The **web UI** is only available at **`/ui`** if [`external-ui`](https://wiki.metacubex.one/en/config/general/#external-user-interface) points at a directory that contains the panel assets. GeoShift’s `config/config.yaml` sets `external-ui` (`ui` under your config directory) and `external-ui-url` (metacubexd zip). When you open **`http://127.0.0.1:9090/ui`**, the page and the API share the same origin, so **you do not need CORS for that path**. The file also sets **`external-controller-cors`** only so an **optional** hosted dashboard (e.g. [yacd](https://yacd.metacubex.one))—loaded from the public web—can ask your browser to talk to `127.0.0.1:9090` without the browser blocking it.
+
+**First run (or if you deleted the `ui` folder):** while Mihomo is running, download the panel into `external-ui`:
+
 ```powershell
-# Dashboard runs on localhost:9090
-# Open in your default browser:
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:9090/upgrade/ui
+```
+
+If `config.yaml` has a non-empty `secret`, use:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:9090/upgrade/ui `
+  -Headers @{ Authorization = 'Bearer YOURSECRET' }
+```
+
+Then open the local UI:
+
+```powershell
 Start-Process 'http://127.0.0.1:9090/ui'
 ```
 
-**Expected:** Dashboard loads, shows proxy groups (e.g., `US-PROXY`), and displays active connections if you make a request through the proxy.
+**Expected:** Dashboard loads, shows proxy groups (e.g., `US-PROXY`), and shows active connections when traffic goes through Mihomo.
 
-**If dashboard won't load:** Mihomo didn't start. Check logs (Step 7).
+**Troubleshooting:**
+
+- **`404 page not found` on `/ui`:** The controller is usually up; panel files are missing or `external-ui` is wrong. Run the `Invoke-RestMethod` line above, confirm `ui` under your config directory (e.g. `C:\ProgramData\GeoShift\config\ui\` when using defaults) contains files, then reload.
+- **Nothing answers on port 9090:** Mihomo did not start or did not bind the controller — check logs (Step 7).
+- **Hosted panel instead of local files:** [yacd](https://yacd.metacubex.one/?hostname=127.0.0.1&port=9090) (add `&secret=…` if you use a secret). The repo CORS block is there for this pattern.
 
 ---
 
