@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 
 $EnvFile = 'C:\ProgramData\GeoShift\geoshift.env'
 $LogFile = 'C:\ProgramData\GeoShift\logs\tunnel-us.log'
+$SshErrLog = 'C:\ProgramData\GeoShift\logs\tunnel-us-ssh.err'
 $LogMaxBytes = 1MB
 
 function Write-Log {
@@ -51,14 +52,24 @@ Write-Log "Starting tunnel to ${sshUser}@${lightsailIp}"
 
 while ($true) {
     try {
+        if (Test-Path $SshErrLog) { Remove-Item $SshErrLog -Force -ErrorAction SilentlyContinue }
         $proc = Start-Process -FilePath 'ssh.exe' `
             -ArgumentList @('-i', $sshKey, '-D', '1080', '-N',
                             '-o', 'StrictHostKeyChecking=accept-new',
-                            '-o', 'ServerAliveInterval=30',
+                            '-o', 'ServerAliveInterval=15',
                             '-o', 'ServerAliveCountMax=3',
+                            '-o', 'TCPKeepAlive=yes',
+                            '-o', 'ExitOnForwardFailure=yes',
+                            '-o', 'ConnectTimeout=30',
                             "${sshUser}@${lightsailIp}") `
-            -NoNewWindow -PassThru -Wait
+            -NoNewWindow -PassThru -Wait `
+            -RedirectStandardError $SshErrLog
         Write-Log "ssh.exe exited (code $($proc.ExitCode)), reconnecting in 5s"
+        if ($proc.ExitCode -ne 0 -and (Test-Path $SshErrLog)) {
+            Get-Content $SshErrLog -ErrorAction SilentlyContinue | Select-Object -Last 30 | ForEach-Object {
+                Write-Log "ssh: $_"
+            }
+        }
     } catch {
         Write-Log "ERROR: $_. Retrying in 5s"
     }

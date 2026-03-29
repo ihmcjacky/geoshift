@@ -1,4 +1,4 @@
-﻿# GeoShift Windows Installer. Run once as Administrator.
+# GeoShift Windows Installer. Run once as Administrator.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 #Requires -RunAsAdministrator
@@ -121,11 +121,14 @@ function Register-GeoShiftTask {
     if ($DelaySeconds -gt 0) {
         $trigger.Delay = "PT${DelaySeconds}S"
     }
+    # Default task settings often skip "At startup" on laptops on battery; allow AC or battery.
     $settings = New-ScheduledTaskSettingsSet `
         -ExecutionTimeLimit ([TimeSpan]::Zero) `
         -RestartCount 999 `
         -RestartInterval (New-TimeSpan -Minutes 1) `
-        -StartWhenAvailable
+        -StartWhenAvailable `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries
     $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 
     $params = @{

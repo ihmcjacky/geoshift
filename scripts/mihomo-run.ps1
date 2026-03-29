@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 $EnvFile    = 'C:\ProgramData\GeoShift\geoshift.env'
 $LogFile    = 'C:\ProgramData\GeoShift\logs\mihomo.log'
 $CoreLog    = 'C:\ProgramData\GeoShift\logs\mihomo-core.log'
+$StderrLog  = 'C:\ProgramData\GeoShift\logs\mihomo-stderr.log'
 $MihomoExe  = 'C:\Program Files\GeoShift\mihomo.exe'
 $WinTunDll  = 'C:\Program Files\GeoShift\wintun.dll'
 $LogMaxBytes = 1MB
@@ -62,16 +63,31 @@ if (-not (Test-Path "$configDir\config.yaml")) {
     exit 1
 }
 
-# Rotate core log before launching (mihomo appends to it)
+# Mihomo does not support --log-file (unknown flag -> usage on stderr, exit 2).
+# Capture console output to mihomo-core.log instead.
 Rotate-IfNeeded $CoreLog
+if (Test-Path $CoreLog) { Remove-Item $CoreLog -Force -ErrorAction SilentlyContinue }
 
 Write-Log "Starting mihomo with config dir: $configDir"
 
 try {
+    if (Test-Path $StderrLog) { Remove-Item $StderrLog -Force -ErrorAction SilentlyContinue }
     $proc = Start-Process -FilePath $MihomoExe `
-        -ArgumentList @('-d', $configDir, '--log-file', $CoreLog) `
-        -NoNewWindow -PassThru -Wait
+        -ArgumentList @('-d', $configDir) `
+        -NoNewWindow -PassThru -Wait `
+        -RedirectStandardOutput $CoreLog `
+        -RedirectStandardError $StderrLog
     Write-Log "mihomo exited (code $($proc.ExitCode))"
+    if ($proc.ExitCode -ne 0) {
+        if (Test-Path $CoreLog) {
+            Write-Log '--- last lines from mihomo-core.log ---'
+            Get-Content $CoreLog -ErrorAction SilentlyContinue | Select-Object -Last 15 | ForEach-Object { Write-Log "core: $_" }
+        }
+        if (Test-Path $StderrLog) {
+            Write-Log '--- mihomo stderr ---'
+            Get-Content $StderrLog -ErrorAction SilentlyContinue | Select-Object -Last 40 | ForEach-Object { Write-Log "stderr: $_" }
+        }
+    }
 } catch {
     Write-Log "ERROR: $_"
     exit 1

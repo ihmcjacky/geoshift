@@ -603,7 +603,8 @@ dns:
 
 | Constraint | Impact | Mitigation |
 |---|---|---|
-| TUN mode requires elevated privileges on Windows | Script must run as Administrator or via Task Scheduler with "Run as administrator" | Pre-configure Task Scheduler entry at setup |
+| TUN mode requires elevated privileges on Windows | Script must run as Administrator or via Task Scheduler with "Run as administrator" | Pre-configure Task Scheduler entry at setup; first WinTun/driver consent may require an interactive elevated run (SYSTEM cannot click UAC) |
+| OpenSSH private key ACLs (Windows) | `ssh` as SYSTEM rejects keys under another user’s profile if ACLs are “too open” | Use `C:\ProgramData\GeoShift\ssh-keys\` with **SYSTEM-only** `(R)`; see §10 “Windows: installation and runtime notes” |
 | autossh on Windows requires WSL2 or Git Bash | Additional dependency on Windows | Document WSL2 as a prerequisite; alternatively use `plink` (PuTTY) as a Windows-native alternative |
 | SSH tunnel latency | Adds ~20-80ms RTT depending on server location | Acceptable for API calls and web browsing; not suitable for real-time voice/video |
 | Lightsail instance costs | Two instances (US + JP) at ~$3.50–$5/month each | Minimal; can share instances with other projects |
@@ -627,7 +628,7 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 | `systemd` service units | Task Scheduler tasks (SYSTEM account) | Run at boot, no UAC, no console window |
 | `install.sh` | `install.ps1` | One-shot, run as Administrator |
 | `tunnel-us.sh` | `tunnel-us.ps1` | Same SSH flags, `-D 1080` SOCKS5 |
-| `mihomo-run.sh` | `mihomo-run.ps1` | Same Mihomo binary invocation |
+| `mihomo-run.sh` | `mihomo-run.ps1` | Both use **`mihomo -d <configDir>`** only; Windows wrapper redirects stdout/stderr to log files (Mihomo has no `--log-file` flag) |
 | `/etc/geoshift/geoshift.env` | `C:\ProgramData\GeoShift\geoshift.env` | Same key=value format |
 | `/usr/local/lib/geoshift/` | `C:\Program Files\GeoShift\` | Scripts + mihomo.exe + wintun.dll |
 | `setcap cap_net_admin` | WinTun driver + SYSTEM privileges | TUN mode on Windows requires SYSTEM or admin |
@@ -638,7 +639,7 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 - Windows 10 or 11 (x86-64)
 - **OpenSSH Client** feature enabled (Settings → Apps → Optional Features → OpenSSH Client)
 - Run `install.ps1` once as **Administrator** (only needed for setup; services run as SYSTEM thereafter)
-- Your Lightsail `.pem` key readable by SYSTEM: `icacls "key.pem" /grant "SYSTEM:(R)"`
+- **SSH key for SYSTEM:** OpenSSH rejects keys under `C:\Users\…\.ssh\` when ACLs are “too open” (e.g. your user and SYSTEM both have access). Copy the `.pem` to `C:\ProgramData\GeoShift\ssh-keys\`, set ACL to **only** `NT AUTHORITY\SYSTEM:(R)`, and set `SSH_PRIVATE_KEY` in `geoshift.env` to that path (see Installation step 5 and Verification step 4).
 
 ### File Locations
 
@@ -647,10 +648,13 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 | Scripts + binaries | `C:\Program Files\GeoShift\` |
 | Config, env, logs | `C:\ProgramData\GeoShift\` |
 | Env file | `C:\ProgramData\GeoShift\geoshift.env` |
+| SSH key (recommended for Task Scheduler) | `C:\ProgramData\GeoShift\ssh-keys\*.pem` (ACL: SYSTEM read only) |
 | Mihomo config | `C:\ProgramData\GeoShift\config\config.yaml` |
 | Tunnel log | `C:\ProgramData\GeoShift\logs\tunnel-us.log` |
+| Tunnel SSH stderr (raw) | `C:\ProgramData\GeoShift\logs\tunnel-us-ssh.err` |
 | Mihomo wrapper log | `C:\ProgramData\GeoShift\logs\mihomo.log` |
 | Mihomo core log | `C:\ProgramData\GeoShift\logs\mihomo-core.log` |
+| Mihomo stderr (on failure) | `C:\ProgramData\GeoShift\logs\mihomo-stderr.log` (also copied into `mihomo.log` by `mihomo-run.ps1`) |
 
 ### Log Rotation
 
@@ -662,8 +666,8 @@ Both tasks run as **SYSTEM** with highest privileges — no UAC prompts, no visi
 
 | Task Name | Script | Trigger | Restart |
 |---|---|---|---|
-| `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup | On failure, 5s delay, unlimited |
-| `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + 10s delay | On failure, 5s delay, unlimited |
+| `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup | On failure, **1 minute** delay, unlimited |
+| `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + 10s delay | On failure, **1 minute** delay, unlimited |
 
 The 10s delay on `GeoShift-Mihomo` ensures the SSH tunnel is up before Mihomo starts (replaces `After=geoshift-tunnel-us.service`).
 
@@ -672,13 +676,60 @@ The 10s delay on `GeoShift-Mihomo` ensures the SSH tunnel is up before Mihomo st
 1. Clone the repo or copy files to a working directory
 2. Open PowerShell as **Administrator**
 3. Run: `powershell -ExecutionPolicy Bypass -File scripts\install.ps1`
-4. Edit `C:\ProgramData\GeoShift\geoshift.env` with your Lightsail IP and SSH key path
-5. Grant SYSTEM read access to your SSH key: `icacls "C:\Users\you\.ssh\lightsail.pem" /grant "SYSTEM:(R)"`
+4. Edit `C:\ProgramData\GeoShift\geoshift.env` with your Lightsail IP and SSH user
+5. **SSH private key (required for tunnel running as SYSTEM):** Do **not** point `SSH_PRIVATE_KEY` at a file under your profile if OpenSSH reports “permissions too open” / “bad permissions”. Instead:
+   - Create `C:\ProgramData\GeoShift\ssh-keys\` and copy your Lightsail `.pem` there (same filename is fine).
+   - In an elevated prompt: `icacls "C:\ProgramData\GeoShift\ssh-keys\your.pem" /inheritance:r` then `icacls "…\your.pem" /grant:r "SYSTEM:(R)"`. Confirm with `icacls` that **only** `NT AUTHORITY\SYSTEM` has access.
+   - Set `SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\your.pem` in `geoshift.env`. Keep the original under `C:\Users\you\.ssh\` for interactive `ssh` only.
 6. Reboot (or start tasks manually from Task Scheduler / PowerShell)
+
+### Windows: installation and runtime notes (troubleshooting reference)
+
+This section summarizes issues that commonly appear when bringing up GeoShift on Windows 10/11 with **PowerShell 5.1**, **Task Scheduler (LOCAL SYSTEM)**, **OpenSSH**, and **Mihomo**. It complements Installation step 5 and Verification below.
+
+#### PowerShell scripts and `install.ps1`
+
+- **UTF-8 with BOM for `.ps1` files.** Windows PowerShell 5.1 loads scripts **without** a byte-order mark using the system ANSI code page (e.g. Windows-1252), not UTF-8. That produces mojibake and can break parsing. The repo ships `scripts\install.ps1`, `tunnel-us.ps1`, and `mihomo-run.ps1` as **UTF-8 with BOM**; keep that when saving from an editor.
+- **ASCII punctuation in scripts** (hyphen instead of Unicode em dash in double-quoted strings) avoids rare tokenizer edge cases on 5.1. **PowerShell 7 (`pwsh`)** is more UTF-8-friendly; scheduled tasks still use `powershell.exe` (5.1) unless you change them.
+- **Task Scheduler restart interval:** The scheduler API requires a **restart interval of at least one minute**. Shorter values (for example **PT5S**) fail with `0x80041318` / “incorrectly formatted or out of range.” `install.ps1` registers tasks with a **one-minute** restart interval.
+
+#### SSH tunnel (`GeoShift-Tunnel-US`)
+
+- **Runs as LOCAL SYSTEM**, not your interactive user. Manual `ssh -i …` as *you* can succeed while the task still fails until `geoshift.env` and key ACLs match **SYSTEM**.
+- **“Bad permissions” / “too open”:** Point `SSH_PRIVATE_KEY` at a **ProgramData** copy with **only** `NT AUTHORITY\SYSTEM:(R)` on the ACL (see Installation step 5). A key under `C:\Users\…\.ssh\` with both **you** and **SYSTEM** allowed is often rejected by OpenSSH for the SYSTEM-run tunnel.
+- **Logs:** `tunnel-us.ps1` records SSH **stderr** in `tunnel-us.log` (lines prefixed `ssh:`) and in `logs\tunnel-us-ssh.err`. **Exit code 255** is generic; those lines carry the real reason.
+- **`ssh -v`:** An early `identity file … type -1` can be a red herring; rely on `Trying private key` and `Authenticated to … using "publickey"`.
+- **Quiet `tunnel-us.log`:** One line `Starting tunnel to …` and **no** `ssh.exe exited` line usually means **success** while `ssh` stays connected. Confirm with `Get-Process ssh` and `Get-NetTCPConnection -LocalPort 1080 -State Listen`.
+
+#### Mihomo (`GeoShift-Mihomo`)
+
+- **No `--log-file` flag.** Mihomo is invoked as **`mihomo.exe -d <configDir>`** only (aligned with Linux `mihomo-run.sh`). Unknown flags (including **`--log-file`**) print **usage text to stderr** and often exit with **code 2**.
+- **Logs:** `mihomo-run.ps1` redirects **stdout** to `mihomo-core.log` and **stderr** to `mihomo-stderr.log`; on non-zero exit it appends tails into `mihomo.log`.
+- **WinTun / TUN and prompts:** With `tun.enable: true`, an interactive elevated run may show a **driver or capability** dialog. **SYSTEM** has **no desktop** to approve it. Complete setup once while logged in (or reboot after a successful interactive run), then rely on auto-start. If the task still fails, options include running the Mihomo task **as your user** or turning **TUN off** and using **proxy ports** (`7890` / `7891`) only.
+
+#### Task Scheduler **State** column
+
+- **`GeoShift-Tunnel-US` = Running** is expected while the tunnel is up (`tunnel-us.ps1` blocks inside a reconnect loop).
+- **`GeoShift-Mihomo` = Ready** means the **scheduled action finished** (wrapper exited), not necessarily that Mihomo is down. If `mihomo.exe` is still running, the task may show **Running**; if Mihomo exited, **Ready** is normal. Use **`Get-Process mihomo`** to confirm.
+
+#### Verifying US egress over SOCKS
+
+- Some sites return **IPv6**; for a clear **IPv4** check:  
+  `curl.exe -s --max-time 20 --proxy socks5h://127.0.0.1:1080 https://api.ipify.org`
+
+#### Updating scripts after `git pull`
+
+- **Copy** revised `tunnel-us.ps1` / `mihomo-run.ps1` into **`C:\Program Files\GeoShift\`**, or **re-run** `install.ps1` as Administrator, so Task Scheduler runs the latest versions.
+
+#### Automated verification script
+
+- From the repo:  
+  `powershell -ExecutionPolicy Bypass -File scripts\verify-geoshift.ps1`  
+  Checks paths, `geoshift.env` (sanitized), tasks, processes, log tails, and ports **1080** / **9090**.
 
 ### Verification
 
-Follow these steps **after installation and configuration** to verify GeoShift is working on Windows 11:
+Follow these steps **after installation and configuration** to verify GeoShift is working on Windows 11. For a scripted smoke test, run `scripts\verify-geoshift.ps1` (see above).
 
 #### Step 1: Verify Installer Completed Successfully
 
@@ -731,8 +782,9 @@ Get-ScheduledTask -TaskName GeoShift-Mihomo | Get-ScheduledTaskInfo
 ```
 
 **Expected output:**
-- Two tasks listed: `GeoShift-Tunnel-US` and `GeoShift-Mihomo`, both with `State=Ready`
-- Task info shows no recent failures (NextRunTime in future, LastTaskResult = 0)
+- Two tasks listed: `GeoShift-Tunnel-US` and `GeoShift-Mihomo`
+- While healthy, **`GeoShift-Tunnel-US` often shows `State=Running`** (long-running `ssh` loop). **`GeoShift-Mihomo` may show `Ready`** after the wrapper exits even if you expect Mihomo to be up; use **`Get-Process mihomo`** to confirm the process. When Mihomo is running under the wrapper, its task may show **Running**.
+- Task info: no persistent failures (`LastTaskResult = 0` after successful runs; `NextRunTime` as appropriate for startup triggers)
 
 **If failed:**
 - Tasks may not be registered: re-run `install.ps1` as Administrator
@@ -740,22 +792,26 @@ Get-ScheduledTask -TaskName GeoShift-Mihomo | Get-ScheduledTaskInfo
 
 ---
 
-#### Step 4: Grant SYSTEM Access to SSH Key
+#### Step 4: SSH Key for the Tunnel (SYSTEM + OpenSSH)
+
+The scheduled tunnel runs `ssh` as **LOCAL SYSTEM**. OpenSSH will ignore a key that is “too open” (typically a `.pem` under your user profile with both you and SYSTEM on the ACL).
+
+**Recommended:** use a copy under ProgramData with **only** SYSTEM allowed to read it, and reference it in `geoshift.env`.
 
 ```powershell
-# List your SSH key files
-Get-ChildItem 'C:\Users\' -Recurse -Filter '*.pem' -ErrorAction SilentlyContinue
+$destDir = 'C:\ProgramData\GeoShift\ssh-keys'
+New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+Copy-Item 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem' -Destination "$destDir\lightsail.pem" -Force
 
-# Grant SYSTEM read access (replace path as needed)
-icacls 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem' /grant 'SYSTEM:(R)'
-
-# Verify permissions
-icacls 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem'
+$key = "$destDir\lightsail.pem"
+icacls $key /inheritance:r
+icacls $key /grant:r 'SYSTEM:(R)'
+icacls $key
 ```
 
-**Expected output:** `SYSTEM` appears in the ACL with `(R)` (Read) permission.
+**Expected output:** `icacls` lists **only** `NT AUTHORITY\SYSTEM:(R)` for that file. In `geoshift.env`, `SSH_PRIVATE_KEY` must be this path (not the copy under `C:\Users\…\.ssh\`).
 
-**If failed:** The SSH tunnel will fail. Ensure the `.pem` file path is correct and SYSTEM has read access.
+**If failed:** If you still see `bad permissions` in `tunnel-us.log`, remove any extra ACEs (Administrators, your user) until only SYSTEM remains, or run `takeown /F $key` as admin and re-apply `icacls` as above.
 
 ---
 
@@ -797,7 +853,8 @@ curl.exe https://ifconfig.me
 # Method 3: Configure Firefox/Chrome to use SOCKS5 proxy 127.0.0.1:1080, then visit https://ifconfig.me
 ```
 
-**Expected output:** IP address should match your AWS Lightsail US instance IP (not your home ISP IP).
+**Expected output:** IP address should match your AWS Lightsail US instance **IPv4** (not your home ISP IP). Some sites prefer **IPv6**; for an explicit IPv4 result through SOCKS:  
+`curl.exe -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org`
 
 **If you see your home ISP IP:** SSH tunnel is not running. Check logs (Step 7).
 
@@ -814,18 +871,26 @@ Get-Content 'C:\ProgramData\GeoShift\logs\tunnel-us.log' -Tail 20
 Write-Host "=== Mihomo Wrapper Log ==="
 Get-Content 'C:\ProgramData\GeoShift\logs\mihomo.log' -Tail 20
 
-# View Mihomo core log
+# View Mihomo core log (stdout from mihomo.exe)
 Write-Host "=== Mihomo Core Log ==="
 Get-Content 'C:\ProgramData\GeoShift\logs\mihomo-core.log' -Tail 20
+
+# Mihomo stderr (invalid CLI flags, early crashes)
+Write-Host "=== Mihomo stderr log ==="
+Get-Content 'C:\ProgramData\GeoShift\logs\mihomo-stderr.log' -Tail 30
 ```
 
-**Expected output:** Timestamps and INFO-level messages. No ERROR or FATAL messages.
+**Expected output:** Timestamps and INFO-level messages in core log. No ERROR or FATAL messages.
 
 **Common errors:**
 - `ERROR: env file not found` → Config or env file path wrong
 - `ERROR: SSH key not found` → Path in `geoshift.env` incorrect
+- `Load key "...": bad permissions` / `Permissions … are too open` → Use ProgramData key copy with SYSTEM-only ACL and set `SSH_PRIVATE_KEY` accordingly (Step 4 above)
+- `ssh:` lines in `tunnel-us.log` or `tunnel-us-ssh.err` → Real SSH failure reason (auth, firewall, host key, etc.)
+- **Mihomo stderr full of flag help** (`-f`, `-t`, `-v`, …) → Invalid CLI arguments (historically **`--log-file`**); wrapper must use **`mihomo.exe -d <dir>`** only (see “Windows: installation and runtime notes”)
 - `ERROR: wintun.dll not found` → Installer failed to download WinTun
 - `ERROR: no config at ...` → Mihomo config not copied to `C:\ProgramData\GeoShift\config\`
+- **Mihomo exit code 2** after TUN enabled → Often WinTun/driver or first-run consent; see WinTun bullet under “Windows: installation and runtime notes”
 
 ---
 
@@ -915,4 +980,4 @@ Disable-ScheduledTask -TaskName GeoShift-Tunnel-US
 
 ---
 
-*Last updated: March 2026*
+*Last updated: March 2026 (Windows troubleshooting section expanded from field experience.)*
