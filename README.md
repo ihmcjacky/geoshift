@@ -15,6 +15,7 @@
 7. [Component Responsibilities](#7-component-responsibilities)
 8. [Task Breakdown](#8-task-breakdown)
 9. [Limitations & Known Constraints](#9-limitations--known-constraints)
+10. [Phase 2 — Windows Platform](#10-phase-2--windows-platform) *(subsections: installation, fix-windows.ps1 for existing installs, verification, troubleshooting)*
 
 ---
 
@@ -604,7 +605,7 @@ dns:
 | Constraint | Impact | Mitigation |
 |---|---|---|
 | TUN mode requires elevated privileges on Windows | Script must run as Administrator or via Task Scheduler with "Run as administrator" | Pre-configure Task Scheduler entry at setup; first WinTun/driver consent may require an interactive elevated run (SYSTEM cannot click UAC) |
-| OpenSSH private key ACLs (Windows) | `ssh` as SYSTEM rejects keys under another user’s profile if ACLs are “too open” | Use `C:\ProgramData\GeoShift\ssh-keys\` with **SYSTEM-only** `(R)`; see §10 “Windows: installation and runtime notes” |
+| OpenSSH private key permissions (Windows) | `ssh` as SYSTEM rejects a key if the **file owner** is not `NT AUTHORITY\SYSTEM`, even if `icacls` shows only `SYSTEM:(R)` — causes silent fallback and `Permission denied (publickey)` | Run `scripts\fix-windows.ps1` as Administrator; see §10 “Applying fixes to existing installations” |
 | autossh on Windows requires WSL2 or Git Bash | Additional dependency on Windows | Document WSL2 as a prerequisite; alternatively use `plink` (PuTTY) as a Windows-native alternative |
 | SSH tunnel latency | Adds ~20-80ms RTT depending on server location | Acceptable for API calls and web browsing; not suitable for real-time voice/video |
 | Lightsail instance costs | Two instances (US + JP) at ~$3.50–$5/month each | Minimal; can share instances with other projects |
@@ -640,7 +641,7 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 - Windows 10 or 11 (x86-64)
 - **OpenSSH Client** feature enabled (Settings → Apps → Optional Features → OpenSSH Client)
 - Run `install.ps1` once as **Administrator** (only needed for setup; services run as SYSTEM thereafter)
-- **SSH key for SYSTEM:** OpenSSH rejects keys under `C:\Users\…\.ssh\` when ACLs are “too open” (e.g. your user and SYSTEM both have access). Copy the `.pem` to `C:\ProgramData\GeoShift\ssh-keys\`, set ACL to **only** `NT AUTHORITY\SYSTEM:(R)`, and set `SSH_PRIVATE_KEY` in `geoshift.env` to that path (see Installation step 5 and Verification step 4).
+- **SSH key for SYSTEM:** OpenSSH checks both the ACL **and the file owner**. Even if `icacls` shows only `NT AUTHORITY\SYSTEM:(R)`, the key will be rejected if the file owner is `BUILTIN\Administrators` or your user account — OpenSSH considers any owner/user mismatch “bad permissions” and silently falls back to password auth, which returns **”Permission denied (publickey)”**. Copy the `.pem` to `C:\ProgramData\GeoShift\ssh-keys\`, then run `scripts\fix-windows.ps1` (or the manual commands in Installation step 5) to set **owner = SYSTEM** and ACL = SYSTEM:Read. Set `SSH_PRIVATE_KEY` in `geoshift.env` to that path.
 
 ### File Locations
 
@@ -667,10 +668,12 @@ Both tasks run as **SYSTEM** with highest privileges — no UAC prompts, no visi
 
 | Task Name | Script | Trigger | Restart |
 |---|---|---|---|
-| `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup | On failure, **1 minute** delay, unlimited |
-| `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + 10s delay | On failure, **1 minute** delay, unlimited |
+| `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup + **30 s delay** | On failure, **1 minute** delay, unlimited |
+| `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + **40 s delay** | On failure, **1 minute** delay, unlimited |
 
-The 10s delay on `GeoShift-Mihomo` ensures the SSH tunnel is up before Mihomo starts (replaces `After=geoshift-tunnel-us.service`).
+The 30 s delay on `GeoShift-Tunnel-US` lets the NIC acquire an IP before `ssh.exe` attempts to connect (otherwise the first connection attempt always fails at early boot). The extra 10 s on `GeoShift-Mihomo` ensures the tunnel is up before Mihomo starts (replaces `After=geoshift-tunnel-us.service`).
+
+> **Note:** `install.ps1` applies these delays automatically. If your tasks were registered with an older version, run `scripts\fix-windows.ps1` (see [Applying fixes to existing installations](#applying-fixes-to-existing-installations)).
 
 ### Installation Steps
 
@@ -678,11 +681,51 @@ The 10s delay on `GeoShift-Mihomo` ensures the SSH tunnel is up before Mihomo st
 2. Open PowerShell as **Administrator**
 3. Run: `powershell -ExecutionPolicy Bypass -File scripts\install.ps1`
 4. Edit `C:\ProgramData\GeoShift\geoshift.env` with your Lightsail IP and SSH user
-5. **SSH private key (required for tunnel running as SYSTEM):** Do **not** point `SSH_PRIVATE_KEY` at a file under your profile if OpenSSH reports “permissions too open” / “bad permissions”. Instead:
-   - Create `C:\ProgramData\GeoShift\ssh-keys\` and copy your Lightsail `.pem` there (same filename is fine).
-   - In an elevated prompt: `icacls "C:\ProgramData\GeoShift\ssh-keys\your.pem" /inheritance:r` then `icacls "…\your.pem" /grant:r "SYSTEM:(R)"`. Confirm with `icacls` that **only** `NT AUTHORITY\SYSTEM` has access.
-   - Set `SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\your.pem` in `geoshift.env`. Keep the original under `C:\Users\you\.ssh\` for interactive `ssh` only.
+5. **SSH private key (required for tunnel running as SYSTEM):** OpenSSH checks both the **ACL** and the **file owner**. Setting `icacls … /grant SYSTEM:(R)` alone is not enough — the file owner must also be `NT AUTHORITY\SYSTEM`, otherwise OpenSSH rejects the key silently and returns `Permission denied (publickey)`.
+   - Create `C:\ProgramData\GeoShift\ssh-keys\` and copy your Lightsail `.pem` there.
+   - Set `SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\your.pem` in `geoshift.env`.
+   - **Re-run `install.ps1`** as Administrator — it now calls `Set-SshKeyPermissionsForSystem` automatically, which sets the owner to SYSTEM, strips inherited ACEs, and grants SYSTEM:Read.
+   - Or manually in an elevated PowerShell prompt:
+     ```powershell
+     $key = 'C:\ProgramData\GeoShift\ssh-keys\your.pem'
+     $acl = Get-Acl $key
+     $acl.SetOwner([System.Security.Principal.NTAccount]'NT AUTHORITY\SYSTEM')
+     $acl.SetAccessRuleProtection($true, $false)   # disable inheritance
+     foreach ($r in @($acl.Access)) { $acl.RemoveAccessRule($r) | Out-Null }
+     $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+         [System.Security.Principal.SecurityIdentifier]'S-1-5-18','Read','None','None','Allow')))
+     Set-Acl $key $acl
+     ```
+   - Keep the original `.pem` under `C:\Users\you\.ssh\` for interactive `ssh` use.
 6. Reboot (or start tasks manually from Task Scheduler / PowerShell)
+
+### Applying fixes to existing installations
+
+If GeoShift was installed with an older version of `install.ps1`, run the one-shot fix script on each affected machine:
+
+```powershell
+# Run as Administrator
+powershell -ExecutionPolicy Bypass -File scripts\fix-windows.ps1
+```
+
+The script applies three fixes in one pass:
+
+| Fix | What it does | Symptom it resolves |
+|-----|-------------|---------------------|
+| **SSH key owner → SYSTEM** | Sets the `.pem` file owner to `NT AUTHORITY\SYSTEM`, strips inherited ACEs, leaves ACL as SYSTEM:Read | `Permission denied (publickey)` even though `icacls` shows `SYSTEM:(R)` |
+| **Battery flag** | Sets `DisallowStartIfOnBatteries = false` on both tasks via `Set-ScheduledTask` (the `Register-ScheduledTask` API on PS 5.1 does not persist this reliably) | Tasks not auto-starting at boot on battery / laptop |
+| **Startup delays** | Sets `PT30S` delay on `GeoShift-Tunnel-US`, `PT40S` on `GeoShift-Mihomo` | SSH failing immediately at boot before NIC has an IP |
+
+After the script completes, restart the tasks or reboot:
+
+```powershell
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
+Stop-ScheduledTask  -TaskName GeoShift-Mihomo
+Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-ScheduledTask -TaskName GeoShift-Mihomo
+```
+
+The key path is read from `C:\ProgramData\GeoShift\geoshift.env` automatically. If the key file does not exist yet, set `SSH_PRIVATE_KEY` in `geoshift.env` first and re-run.
 
 ### Windows: installation and runtime notes (troubleshooting reference)
 
@@ -697,7 +740,7 @@ This section summarizes issues that commonly appear when bringing up GeoShift on
 #### SSH tunnel (`GeoShift-Tunnel-US`)
 
 - **Runs as LOCAL SYSTEM**, not your interactive user. Manual `ssh -i …` as *you* can succeed while the task still fails until `geoshift.env` and key ACLs match **SYSTEM**.
-- **“Bad permissions” / “too open”:** Point `SSH_PRIVATE_KEY` at a **ProgramData** copy with **only** `NT AUTHORITY\SYSTEM:(R)` on the ACL (see Installation step 5). A key under `C:\Users\…\.ssh\` with both **you** and **SYSTEM** allowed is often rejected by OpenSSH for the SYSTEM-run tunnel.
+- **”Bad permissions” / “Permission denied (publickey)”:** OpenSSH checks both the **ACL** and the **file owner**. `icacls` showing only `NT AUTHORITY\SYSTEM:(R)` is necessary but not sufficient — the file owner must also be `NT AUTHORITY\SYSTEM`. If the owner is `BUILTIN\Administrators` (typical when a file is copied by an admin user), OpenSSH refuses the key silently, falls back to password auth, and the server returns `Permission denied (publickey)`. Fix: run `scripts\fix-windows.ps1` as Administrator, or follow Installation step 5 manual commands.
 - **Logs:** `tunnel-us.ps1` records SSH **stderr** in `tunnel-us.log` (lines prefixed `ssh:`) and in `logs\tunnel-us-ssh.err`. **Exit code 255** is generic; those lines carry the real reason.
 - **`ssh -v`:** An early `identity file … type -1` can be a red herring; rely on `Trying private key` and `Authenticated to … using "publickey"`.
 - **Quiet `tunnel-us.log`:** One line `Starting tunnel to …` and **no** `ssh.exe exited` line usually means **success** while `ssh` stays connected. Confirm with `Get-Process ssh` and `Get-NetTCPConnection -LocalPort 1080 -State Listen`.
@@ -795,24 +838,39 @@ Get-ScheduledTask -TaskName GeoShift-Mihomo | Get-ScheduledTaskInfo
 
 #### Step 4: SSH Key for the Tunnel (SYSTEM + OpenSSH)
 
-The scheduled tunnel runs `ssh` as **LOCAL SYSTEM**. OpenSSH will ignore a key that is “too open” (typically a `.pem` under your user profile with both you and SYSTEM on the ACL).
+The scheduled tunnel runs `ssh` as **LOCAL SYSTEM**. OpenSSH checks **both** the ACL and the **file owner**. A file with `SYSTEM:(R)` in the ACL but owned by `BUILTIN\Administrators` or your user account will be refused — OpenSSH considers the owner/identity mismatch “bad permissions” and returns `Permission denied (publickey)`.
 
-**Recommended:** use a copy under ProgramData with **only** SYSTEM allowed to read it, and reference it in `geoshift.env`.
+**Quickest fix — run the one-shot script (as Administrator):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fix-windows.ps1
+```
+
+**Or manually (if you prefer step-by-step):**
 
 ```powershell
 $destDir = 'C:\ProgramData\GeoShift\ssh-keys'
 New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-Copy-Item 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem' -Destination "$destDir\lightsail.pem" -Force
+Copy-Item 'C:\Users\YOUR_USERNAME\.ssh\lightsail.pem' -Destination “$destDir\lightsail.pem” -Force
 
-$key = "$destDir\lightsail.pem"
-icacls $key /inheritance:r
-icacls $key /grant:r 'SYSTEM:(R)'
-icacls $key
+$key = “$destDir\lightsail.pem”
+
+# Set owner to SYSTEM, strip inherited ACEs, grant SYSTEM:Read only
+$acl = Get-Acl $key
+$acl.SetOwner([System.Security.Principal.NTAccount]'NT AUTHORITY\SYSTEM')
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($r in @($acl.Access)) { $acl.RemoveAccessRule($r) | Out-Null }
+$acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+    [System.Security.Principal.SecurityIdentifier]'S-1-5-18','Read','None','None','Allow')))
+Set-Acl $key $acl
+
+# Verify owner
+(Get-Acl $key).Owner   # expected: NT AUTHORITY\SYSTEM
 ```
 
-**Expected output:** `icacls` lists **only** `NT AUTHORITY\SYSTEM:(R)` for that file. In `geoshift.env`, `SSH_PRIVATE_KEY` must be this path (not the copy under `C:\Users\…\.ssh\`).
+**Expected:** `(Get-Acl $key).Owner` returns `NT AUTHORITY\SYSTEM`. In `geoshift.env`, `SSH_PRIVATE_KEY` must point to this path. Keep the original `.pem` under `C:\Users\…\.ssh\` for interactive `ssh` use.
 
-**If failed:** If you still see `bad permissions` in `tunnel-us.log`, remove any extra ACEs (Administrators, your user) until only SYSTEM remains, or run `takeown /F $key` as admin and re-apply `icacls` as above.
+> **Note:** `icacls $key` will return **”Access is denied”** after this fix because the running process (Administrator, not SYSTEM) no longer has access to the file — that is the correct and expected result. To verify the owner instead of the ACL, use `(Get-Acl $key).Owner`.
 
 ---
 
@@ -886,7 +944,7 @@ Get-Content 'C:\ProgramData\GeoShift\logs\mihomo-stderr.log' -Tail 30
 **Common errors:**
 - `ERROR: env file not found` → Config or env file path wrong
 - `ERROR: SSH key not found` → Path in `geoshift.env` incorrect
-- `Load key "...": bad permissions` / `Permissions … are too open` → Use ProgramData key copy with SYSTEM-only ACL and set `SSH_PRIVATE_KEY` accordingly (Step 4 above)
+- `Load key "...": bad permissions` / `Permission denied (publickey)` → The file ACL alone is not enough — the file **owner** must be `NT AUTHORITY\SYSTEM`. Run `scripts\fix-windows.ps1` as Administrator (see Step 4 and [Applying fixes to existing installations](#applying-fixes-to-existing-installations))
 - `ssh:` lines in `tunnel-us.log` or `tunnel-us-ssh.err` → Real SSH failure reason (auth, firewall, host key, etc.)
 - **Mihomo stderr full of flag help** (`-f`, `-t`, `-v`, …) → Invalid CLI arguments (historically **`--log-file`**); wrapper must use **`mihomo.exe -d <dir>`** only (see “Windows: installation and runtime notes”)
 - `ERROR: wintun.dll not found` → Installer failed to download WinTun
@@ -950,13 +1008,16 @@ Start-Process 'http://127.0.0.1:9090/ui'
 Restart-Computer
 
 # After reboot, log back in and verify processes started automatically
+# Allow ~40 seconds after boot for the startup delays to pass before checking
 Get-Process | Where-Object { $_.Name -match 'ssh|mihomo' }
 
 # Or check task status
 Get-ScheduledTask -TaskName GeoShift-* | Get-ScheduledTaskInfo
 ```
 
-**Expected:** Both processes running automatically after boot, no prompts or visible windows.
+**Expected:** Both processes running automatically after boot (~30–40 s after Windows starts), no prompts or visible windows. Tasks start on battery and on AC power.
+
+**If tasks do not start automatically:** Run `scripts\fix-windows.ps1` as Administrator to apply battery and startup-delay fixes to the registered tasks (see [Applying fixes to existing installations](#applying-fixes-to-existing-installations)).
 
 ---
 
@@ -1000,4 +1061,4 @@ Disable-ScheduledTask -TaskName GeoShift-Tunnel-US
 
 ---
 
-*Last updated: March 2026 (Windows troubleshooting section expanded from field experience.)*
+*Last updated: March 2026 (Windows troubleshooting expanded; fix-windows.ps1 added for existing installations; SSH key owner fix and task startup-delay/battery fixes documented.)*
