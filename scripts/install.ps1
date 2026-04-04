@@ -110,8 +110,24 @@ Remove-Item $wintunZip, $wintunDir -Recurse -Force
 # -- Step 4: Copy scripts -----------------------------------------------------
 info "Copying PowerShell scripts"
 $scriptSrc = Split-Path -Parent $PSCommandPath
-Copy-Item "$scriptSrc\tunnel-us.ps1"  -Destination $InstallDir -Force
-Copy-Item "$scriptSrc\mihomo-run.ps1" -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\tunnel-us.ps1"      -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\tunnel-jp.ps1"      -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\mihomo-run.ps1"     -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\geoshift-sync.ps1"  -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\geoshift.ps1"       -Destination $InstallDir -Force
+
+# Create geoshift.bat CLI wrapper so "geoshift sync/reload" works from any prompt
+$batContent = "@echo off`r`npowershell.exe -NonInteractive -ExecutionPolicy Bypass -File `"$InstallDir\geoshift.ps1`" %*`r`n"
+[System.IO.File]::WriteAllText("$InstallDir\geoshift.bat", $batContent)
+
+# Add InstallDir to system PATH if not already present
+$syspath = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine')
+if ($syspath -notlike "*$InstallDir*") {
+    [System.Environment]::SetEnvironmentVariable('PATH', "$syspath;$InstallDir", 'Machine')
+    Write-Host "  Added $InstallDir to system PATH (open a new prompt to use 'geoshift' command)"
+} else {
+    Write-Host "  $InstallDir already in system PATH"
+}
 
 # -- Step 5: Set up env file --------------------------------------------------
 info "Setting up env file"
@@ -158,14 +174,14 @@ if ($envSshKey) {
     Write-Host "  Re-run install.ps1 after setting SSH_PRIVATE_KEY, or call Set-SshKeyPermissionsForSystem manually."
 }
 
-# -- Step 6: Copy config if not present ---------------------------------------
-info "Checking config directory"
+# -- Step 6: Copy config (always overwrite on re-runs) ------------------------
+# User-specific settings live in geoshift.env, not config.yaml, so overwriting
+# config on upgrade is safe and ensures rule-provider format stays current.
+info "Copying config directory"
 $repoConfig = Join-Path (Split-Path -Parent $scriptSrc) 'config'
-if ((Test-Path $repoConfig) -and -not (Test-Path "$ConfigDir\config.yaml")) {
+if (Test-Path $repoConfig) {
     Copy-Item "$repoConfig\*" -Destination $ConfigDir -Recurse -Force
     Write-Host "  Copied config to $ConfigDir"
-} elseif (Test-Path "$ConfigDir\config.yaml") {
-    Write-Host "  Config already present at $ConfigDir"
 } else {
     Write-Host "  WARNING: no config found - copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
 }
@@ -221,8 +237,9 @@ function Register-GeoShiftTask {
 }
 
 # 30-second delay lets the NIC get an IP before ssh.exe tries to connect.
-# Mihomo gets an extra 10 s on top of that to let the tunnel come up first.
+# JP tunnel starts alongside US. Mihomo gets an extra 10 s on top to let tunnels come up first.
 Register-GeoShiftTask -TaskName 'GeoShift-Tunnel-US' -ScriptPath "$InstallDir\tunnel-us.ps1" -DelaySeconds 30
+Register-GeoShiftTask -TaskName 'GeoShift-Tunnel-JP' -ScriptPath "$InstallDir\tunnel-jp.ps1" -DelaySeconds 30
 Register-GeoShiftTask -TaskName 'GeoShift-Mihomo'    -ScriptPath "$InstallDir\mihomo-run.ps1" -DelaySeconds 40
 
 # -- Step 8: Validate Mihomo config -------------------------------------------
@@ -251,8 +268,16 @@ Write-Host "     icacls '<key.pem>' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM
 Write-Host "     NOTE: icacls /grant alone is not enough - the file OWNER must also be SYSTEM."
 Write-Host "  3. Reboot, or start tasks manually:"
 Write-Host "     Start-ScheduledTask -TaskName GeoShift-Tunnel-US"
+Write-Host "     Start-ScheduledTask -TaskName GeoShift-Tunnel-JP"
 Write-Host "     Start-ScheduledTask -TaskName GeoShift-Mihomo"
 Write-Host ""
 Write-Host "Logs: $LogDir"
 Write-Host "Stop:   Stop-ScheduledTask -TaskName GeoShift-Mihomo"
 Write-Host "        Stop-ScheduledTask -TaskName GeoShift-Tunnel-US"
+Write-Host "        Stop-ScheduledTask -TaskName GeoShift-Tunnel-JP"
+Write-Host ""
+Write-Host "Rule sync (open a new prompt after install for PATH to take effect):"
+Write-Host "  geoshift sync    # fetch latest rules from GitHub"
+Write-Host "  geoshift reload  # reload Mihomo config"
+Write-Host ""
+Write-Host "Upgrading an existing install: git pull, then re-run install.ps1 as Administrator"

@@ -1,11 +1,11 @@
-﻿# GeoShift: Persistent SSH SOCKS5 tunnel to US Lightsail on localhost:1080.
+﻿# GeoShift: Persistent SSH SOCKS5 tunnel to JP Lightsail on localhost:1081.
 # Runs as SYSTEM via Task Scheduler. Do not run interactively unless testing.
 
 $ErrorActionPreference = 'Stop'
 
 $EnvFile = 'C:\ProgramData\GeoShift\geoshift.env'
-$LogFile = 'C:\ProgramData\GeoShift\logs\tunnel-us.log'
-$SshErrLog = 'C:\ProgramData\GeoShift\logs\tunnel-us-ssh.err'
+$LogFile = 'C:\ProgramData\GeoShift\logs\tunnel-jp.log'
+$SshErrLog = 'C:\ProgramData\GeoShift\logs\tunnel-jp-ssh.err'
 $LogMaxBytes = 1MB
 
 function Write-Log {
@@ -40,15 +40,15 @@ if (-not (Test-Path $EnvFile)) {
 
 $env = Read-EnvFile $EnvFile
 
-$lightsailIp = $env['US_LIGHTSAIL_IP']
-$sshKey      = $env['SSH_PRIVATE_KEY']
+$lightsailIp = $env['JP_LIGHTSAIL_IP']
+$sshKey      = $env['JP_SSH_PRIVATE_KEY']
 $sshUser     = if ($env['SSH_USER']) { $env['SSH_USER'] } else { 'ubuntu' }
 
-if (-not $lightsailIp) { Write-Log "ERROR: US_LIGHTSAIL_IP not set in $EnvFile"; exit 1 }
-if (-not $sshKey)      { Write-Log "ERROR: SSH_PRIVATE_KEY not set in $EnvFile"; exit 1 }
+if (-not $lightsailIp) { Write-Log "ERROR: JP_LIGHTSAIL_IP not set in $EnvFile"; exit 1 }
+if (-not $sshKey)      { Write-Log "ERROR: JP_SSH_PRIVATE_KEY not set in $EnvFile"; exit 1 }
 if (-not (Test-Path $sshKey)) { Write-Log "ERROR: SSH key not found: $sshKey"; exit 1 }
 
-Write-Log "Starting tunnel to ${sshUser}@${lightsailIp}"
+Write-Log "Starting JP tunnel to ${sshUser}@${lightsailIp}"
 
 # Sync rules before connecting (non-fatal: cached rules used if download fails)
 $syncScript = 'C:\Program Files\GeoShift\geoshift-sync.ps1'
@@ -68,7 +68,7 @@ while ($true) {
     try {
         if (Test-Path $SshErrLog) { Remove-Item $SshErrLog -Force -ErrorAction SilentlyContinue }
         $proc = Start-Process -FilePath 'ssh.exe' `
-            -ArgumentList @('-i', $sshKey, '-D', '1080', '-N',
+            -ArgumentList @('-i', $sshKey, '-D', '1081', '-N',
                             '-o', 'StrictHostKeyChecking=accept-new',
                             '-o', 'ServerAliveInterval=15',
                             '-o', 'ServerAliveCountMax=3',

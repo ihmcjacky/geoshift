@@ -12,17 +12,19 @@ set -a
 source "$ENV_FILE"
 set +a
 
-: "${US_LIGHTSAIL_IP:?US_LIGHTSAIL_IP not set in $ENV_FILE}"
-: "${SSH_PRIVATE_KEY:?SSH_PRIVATE_KEY not set in $ENV_FILE}"
+: "${JP_LIGHTSAIL_IP:?JP_LIGHTSAIL_IP not set in $ENV_FILE}"
+: "${JP_SSH_PRIVATE_KEY:?JP_SSH_PRIVATE_KEY not set in $ENV_FILE}"
 : "${SSH_USER:=ubuntu}"
 
 # sync rules before connecting (non-fatal: cached rules used if download fails)
 /usr/local/lib/geoshift/geoshift-sync.sh || \
   echo "geoshift: rule sync failed, starting with cached rules" >&2
 
-exec /usr/bin/autossh -M 0 -N -D 1080 \
-  -i "$SSH_PRIVATE_KEY" \
+exec /usr/bin/autossh -M 0 -N -D 1081 \
+  -i "$JP_SSH_PRIVATE_KEY" \
   -o StrictHostKeyChecking=accept-new \
-  -o ServerAliveInterval=30 \
-  -o ServerAliveCountMax=3 \
-  "${SSH_USER}@${US_LIGHTSAIL_IP}"
+  -o AddressFamily=inet \
+  -o TCPKeepAlive=yes \
+  -o ServerAliveInterval=10 \
+  -o ServerAliveCountMax=6 \
+  "${SSH_USER}@${JP_LIGHTSAIL_IP}"

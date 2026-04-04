@@ -33,8 +33,11 @@ sudo setcap cap_net_admin,cap_net_bind_service+ep "$MIHOMO_INSTALL"
 
 echo "==> GeoShift lib + env symlink"
 sudo install -d -m 0755 /usr/local/lib/geoshift
-sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh" /usr/local/lib/geoshift/tunnel-us.sh
-sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh" /usr/local/lib/geoshift/mihomo-run.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh"     /usr/local/lib/geoshift/tunnel-us.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-jp.sh"     /usr/local/lib/geoshift/tunnel-jp.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh"    /usr/local/lib/geoshift/mihomo-run.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-sync.sh" /usr/local/lib/geoshift/geoshift-sync.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift.sh"      /usr/local/bin/geoshift
 sudo install -d -m 0755 /etc/geoshift
 if [[ ! -e /etc/geoshift/geoshift.env ]]; then
   sudo ln -sf "$REPO_ROOT/geoshift.env" /etc/geoshift/geoshift.env
@@ -48,6 +51,7 @@ sudo sysctl --system >/dev/null || sudo sysctl -p /etc/sysctl.d/99-geoshift-disa
 
 echo "==> systemd units"
 sudo install -m 0644 "$REPO_ROOT/systemd/geoshift-tunnel-us.service" /etc/systemd/system/
+sudo install -m 0644 "$REPO_ROOT/systemd/geoshift-tunnel-jp.service" /etc/systemd/system/
 sudo install -m 0644 "$REPO_ROOT/systemd/geoshift-mihomo.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 
@@ -62,7 +66,14 @@ echo "Done. Ensure $REPO_ROOT/geoshift.env contains GEOSHIFT_CONFIG_DIR=$REPO_RO
 echo "SSH key must be chmod 600."
 echo
 echo "Start stack:"
-echo "  sudo systemctl enable --now geoshift-tunnel-us.service geoshift-mihomo.service"
+echo "  sudo systemctl enable --now geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service"
 echo "Stop TUN (back to normal routing):"
 echo "  sudo systemctl stop geoshift-mihomo.service"
-echo "  (optional) sudo systemctl stop geoshift-tunnel-us.service"
+echo "  (optional) sudo systemctl stop geoshift-tunnel-us.service geoshift-tunnel-jp.service"
+echo
+echo "Rule sync commands (no tunnel restart needed):"
+echo "  geoshift sync    # fetch latest rules from GitHub"
+echo "  geoshift reload  # reload Mihomo config"
+echo
+echo "Upgrading an existing install: git pull && bash scripts/install.sh"
+echo "  Then: sudo systemctl restart geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service"

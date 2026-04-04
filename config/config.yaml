@@ -44,6 +44,11 @@ proxies:
     server: 127.0.0.1
     port: 1080
     udp: true
+  - name: JP-Lightsail
+    type: socks5
+    server: 127.0.0.1
+    port: 1081
+    udp: true  # SSH tunnels only carry TCP; QUIC attempts will fail with EOF and browser falls back to HTTP/2 TCP
 
 proxy-groups:
   - name: US-PROXY
@@ -51,42 +56,28 @@ proxy-groups:
     proxies:
       - US-Lightsail
       - DIRECT
+  - name: JP-PROXY
+    type: select
+    proxies:
+      - JP-Lightsail
+      - DIRECT
 
-# Domain list: keep in sync with rules/us-ai.txt (annotated copy in rules/us-ai.yaml).
+# Rule sets loaded from files in config/rules/.
+# To add domains: edit the appropriate *.yaml file, commit, then run:
+#   geoshift sync && geoshift reload   (on each device — no tunnel restart needed)
+rule-providers:
+  us-ai:
+    type: file
+    behavior: classical
+    path: ./rules/us-ai.yaml
+  jp-content:
+    type: file
+    behavior: classical
+    path: ./rules/jp-content.yaml
+
 rules:
-  - DOMAIN-SUFFIX,anthropic.com,US-PROXY
-  - DOMAIN-SUFFIX,claude.ai,US-PROXY
-  - DOMAIN-SUFFIX,claude.com,US-PROXY
-  - DOMAIN-SUFFIX,claudeusercontent.com,US-PROXY
-  - DOMAIN-SUFFIX,anthropicusercontent.com,US-PROXY
-  - DOMAIN-SUFFIX,intercom.io,US-PROXY
-  - DOMAIN-SUFFIX,intercomcdn.com,US-PROXY
-  - DOMAIN-SUFFIX,statsig.com,US-PROXY
-  - DOMAIN-SUFFIX,statsigapi.net,US-PROXY
-  - DOMAIN,api.statsig.com,US-PROXY
-  - DOMAIN-SUFFIX,featuregates.org,US-PROXY
-  - DOMAIN-SUFFIX,openai.com,US-PROXY
-  - DOMAIN-SUFFIX,chatgpt.com,US-PROXY
-  - DOMAIN-SUFFIX,oaistatic.com,US-PROXY
-  - DOMAIN-SUFFIX,oaiusercontent.com,US-PROXY
-  - DOMAIN-SUFFIX,openaiapi-site.azureedge.net,US-PROXY
-  - DOMAIN-SUFFIX,ai.google.dev,US-PROXY
-  - DOMAIN-SUFFIX,gemini.google.com,US-PROXY
-  - DOMAIN-SUFFIX,aistudio.google.com,US-PROXY
-  # Google NotebookLM (consumer web + Discovery Engine–style APIs)
-  - DOMAIN-SUFFIX,notebooklm.google,US-PROXY
-  - DOMAIN-SUFFIX,notebooklm.google.com,US-PROXY
-  - DOMAIN-SUFFIX,discoveryengine.googleapis.com,US-PROXY
-  # Google OAuth / IDE surfaces used alongside Claude (were DIRECT in yacd)
-  - DOMAIN-SUFFIX,oauth2.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,cloudcode-pa.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,clients6.google.com,US-PROXY
-  - DOMAIN-SUFFIX,generativelanguage.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,aisandbox-pa.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,aiplatform.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com,US-PROXY
-  - DOMAIN-SUFFIX,deepmind.com,US-PROXY
-  - DOMAIN-SUFFIX,deepmind.google,US-PROXY
+  - RULE-SET,us-ai,US-PROXY
+  - RULE-SET,jp-content,JP-PROXY
   - MATCH,DIRECT
 
 tun:

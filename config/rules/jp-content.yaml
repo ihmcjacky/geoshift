@@ -1,0 +1,26 @@
+# JP content rules - loaded by Mihomo rule-providers (classical behavior).
+# Proxy target (JP-PROXY) is assigned in config.yaml via RULE-SET.
+# To add domains: append entries here, commit, then run "geoshift sync && geoshift reload"
+# on each device. No tunnel restart needed.
+payload:
+  - DOMAIN-SUFFIX,dmm.co.jp
+  - DOMAIN-SUFFIX,dmm.com
+  - DOMAIN-SUFFIX,fanza.com
+  - DOMAIN-SUFFIX,fanza.jp
+  - DOMAIN-SUFFIX,nicovideo.jp
+  - DOMAIN-SUFFIX,dmc.nico
+  - DOMAIN-SUFFIX,nico.ms
+  - DOMAIN-SUFFIX,pixiv.net
+  - DOMAIN-SUFFIX,pximg.net
+  - DOMAIN-SUFFIX,pixivision.net
+  - DOMAIN-SUFFIX,tver.jp
+  - DOMAIN-SUFFIX,streaks.jp
+  - DOMAIN-SUFFIX,jocdn.net
+  - DOMAIN-SUFFIX,navismithapis-cdn.com
+  - DOMAIN-SUFFIX,navismithapis.com
+  - DOMAIN-SUFFIX,dmm-extension.com
+  - DOMAIN-SUFFIX,inmobi.com
+  - DOMAIN-SUFFIX,omappapi.com
+  - DOMAIN-SUFFIX,attackers.net
+  - DOMAIN-SUFFIX,ideapockets.com
+  - DOMAIN-SUFFIX,faleno.jp

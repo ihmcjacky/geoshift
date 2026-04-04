@@ -606,79 +606,105 @@ dns:
 
 ---
 
-## 9. Applying Rule Updates (Without Restarting Tunnels)
+## 9. Rule Sync and Applying Updates
 
-When you add or remove domains from the routing rules (e.g. adding a new service to `config.yaml`), **only Mihomo needs to reload — the SSH tunnels must not be restarted**. The tunnels are stateless pipes that carry whatever traffic Mihomo sends through them; they have no knowledge of routing rules.
+Rules live in `config/rules/us-ai.yaml` and `config/rules/jp-content.yaml`. Mihomo loads these at startup via `rule-providers`. Adding a domain means editing the relevant file, committing, and propagating to all devices — no tunnel restart needed.
 
-### What needs restarting for each type of change
+### 9.1 Automatic sync on tunnel startup
+
+Every time a tunnel service starts, it automatically fetches the latest rule files from GitHub before connecting. This keeps all devices in sync passively — just restart a tunnel and rules update themselves.
+
+If GitHub is unreachable at startup, the existing cached files are used and a warning is logged. The tunnel always connects regardless.
+
+### 9.2 Manual sync and reload
+
+The `geoshift` CLI provides two commands for manual control:
+
+| Command | What it does |
+|---|---|
+| `geoshift sync` | Downloads latest `*.yaml` and `*.txt` rule files from GitHub into the local config/rules directory |
+| `geoshift reload` | Signals Mihomo to re-read all rule files from disk (via `PUT /configs?force=true` API). Falls back to `systemctl restart` if Mihomo API is unreachable. |
+
+**Linux:**
+
+```bash
+# Fetch latest rules, then apply — tunnels stay connected
+geoshift sync && geoshift reload
+
+# Confirm services are healthy
+sudo systemctl status geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service
+```
+
+**Windows** (run in any prompt after install):
+
+```powershell
+geoshift sync
+geoshift reload
+```
+
+Mihomo reload takes under 2 seconds. Active SSH tunnels on ports 1080/1081 are unaffected.
+
+### 9.3 Adding a domain to the rule list
+
+1. Edit `config/rules/jp-content.yaml` or `config/rules/us-ai.yaml` — add a `- DOMAIN-SUFFIX,example.com` line under `payload:`
+2. Commit and push
+3. On each device: `geoshift sync && geoshift reload`
+
+No changes to `config/config.yaml` are needed. The proxy target (`JP-PROXY` / `US-PROXY`) is set once in `config.yaml` via `RULE-SET` references.
+
+### 9.4 What needs restarting for each type of change
 
 | Change | Tunnel(s) | Mihomo |
 |---|---|---|
-| Add / remove a domain rule | No | **Yes — reload** |
-| Add a new proxy group | No | **Yes — reload** |
+| Add / remove a domain rule | No | **Yes — `geoshift reload`** |
+| Add a new proxy group | No | **Yes — `geoshift reload`** |
 | Add a new tunnel / region | **Yes — start the new tunnel service** | **Yes — reload** |
 | Fix a broken tunnel | **Yes — restart that tunnel** | No |
 | Change Mihomo TUN / DNS config | No | **Yes — restart** (TUN re-initialises) |
 
+### 9.5 Verifying the reload worked
+
+After reloading Mihomo, open the dashboard at `http://127.0.0.1:9090/ui` and check the Rules tab. New entries appear immediately. Smoke-test via curl:
+
+```bash
+# Linux
+curl -s --proxy socks5h://127.0.0.1:1081 https://api.ipify.org   # should show JP Lightsail IP
+curl -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # should show US Lightsail IP
+```
+
+---
+
+## 9a. Upgrading an Existing Install
+
 ### Linux
 
 ```bash
-# 1. Edit config/config.yaml (or rules/*.txt) in the repo
-# 2. Reload Mihomo only -- tunnels stay connected
-sudo systemctl restart geoshift-mihomo.service
-
-# Confirm all three services are healthy
-sudo systemctl status geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service
+git pull
+bash scripts/install.sh
+sudo systemctl restart geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service
 ```
 
-Mihomo restart takes under 2 seconds. Active SSH tunnels on ports 1080/1081 are unaffected; Mihomo reconnects to them automatically on startup.
-
-If you are adding a **new region** for the first time (e.g. first-time JP setup after previously having US only):
-
-```bash
-# Start the new tunnel service (one-time)
-sudo systemctl enable --now geoshift-tunnel-jp.service
-
-# Then reload Mihomo
-sudo systemctl restart geoshift-mihomo.service
-```
+`install.sh` is idempotent — re-running it copies updated scripts to `/usr/local/lib/geoshift/` and installs the `geoshift` CLI to `/usr/local/bin/geoshift`. The `git pull` updates `config.yaml` and the rule files in-place (Mihomo reads them directly from the repo directory).
 
 ### Windows
 
 ```powershell
-# 1. Edit config in the repo, then copy updated config.yaml to C:\ProgramData\GeoShift\config\
-#    (or re-run install.ps1 as Administrator to sync all files)
+# In the repo directory:
+git pull
 
-# 2. Restart Mihomo task only -- tunnel tasks stay running
-Stop-ScheduledTask  -TaskName GeoShift-Mihomo
-Start-Sleep -Seconds 2
-Start-ScheduledTask -TaskName GeoShift-Mihomo
-
-# Confirm Mihomo process came back up
-Get-Process mihomo -ErrorAction SilentlyContinue
+# Then as Administrator:
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-If you are starting the **JP tunnel for the first time** on Windows:
+`install.ps1` always overwrites the config and scripts in `C:\Program Files\GeoShift\` on re-run. After the upgrade, restart the scheduled tasks:
 
 ```powershell
-# Register and start the JP tunnel task (install.ps1 handles this on a fresh install)
-# For existing installs, re-run install.ps1 as Administrator, then:
-Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
-
-# Then reload Mihomo
 Stop-ScheduledTask  -TaskName GeoShift-Mihomo
-Start-Sleep -Seconds 2
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-JP
+Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
 Start-ScheduledTask -TaskName GeoShift-Mihomo
-```
-
-### Verifying the reload worked
-
-After restarting Mihomo, open the dashboard at `http://127.0.0.1:9090/ui` and check the Connections or Rules tab. New domain rules appear immediately. You can also smoke-test via curl:
-
-```bash
-# Linux / macOS / Git Bash
-curl -s --proxy socks5h://127.0.0.1:1081 https://api.ipify.org   # should show JP Lightsail IP
-curl -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # should show US Lightsail IP
 ```
 
 ---
