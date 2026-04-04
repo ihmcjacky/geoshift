@@ -14,8 +14,9 @@
 6. [Why TUN Mode Closes the Gap](#6-why-tun-mode-closes-the-gap)
 7. [Component Responsibilities](#7-component-responsibilities)
 8. [Task Breakdown](#8-task-breakdown)
-9. [Limitations & Known Constraints](#9-limitations--known-constraints)
-10. [Phase 2 — Windows Platform](#10-phase-2--windows-platform) *(subsections: installation, fix-windows.ps1 for existing installs, verification, troubleshooting)*
+9. [Applying Rule Updates (Without Restarting Tunnels)](#9-applying-rule-updates-without-restarting-tunnels)
+10. [Limitations & Known Constraints](#10-limitations--known-constraints)
+11. [Phase 2 — Windows Platform](#11-phase-2--windows-platform) *(subsections: installation, fix-windows.ps1 for existing installs, verification, troubleshooting)*
 
 ---
 
@@ -25,8 +26,9 @@ Residing in Hong Kong creates two categories of geo-restriction problems:
 
 | Category | Examples | Why Blocked |
 |---|---|---|
-| Japanese content sites | DMM, NicoNico, Pixiv (adult/regional content), certain streaming | IP-based geo-fence enforcing Japan-only access |
+| Japanese content sites | DMM/FANZA, NicoNico, Pixiv, TVer, Attackers, Ideapockets, Faleno | IP-based geo-fence enforcing Japan-only access; **some services (DMM TV, NicoNico) also block known datacenter IPs** |
 | US AI services | Claude (claude.ai, API), ChatGPT, Gemini Code Assist, Google Antigravity | Service not licensed for HK; IP geo-fence blocks HK ranges |
+| US streaming | Shudder (AMC Networks horror streaming) | US/select-country licensing only |
 
 The **access modes** also differ and each has different technical requirements:
 
@@ -588,7 +590,11 @@ dns:
 | api.anthropic.com | `curl` (direct, no proxy flag) | US IP | 200 response with API key |
 | Gemini Code Assist | VS Code extension | US IP | Code suggestions working |
 | Claude CLI | `claude` command | US IP | CLI connects and responds |
+| shudder.com | Chrome | US IP | Site loads, no geo-block |
 | dmm.co.jp | Chrome | JP IP | Site loads, no geo-block |
+| nicovideo.jp | Chrome | JP IP | Site loads, no geo-block |
+| tver.jp | Chrome | JP IP | Video plays without region error |
+| pixiv.net (images) | Chrome | JP IP | Images load (pximg.net CDN proxied) |
 | google.com.hk | Chrome | HK IP | Direct, no tunnel |
 | IP check | `curl ifconfig.me` via specific proxy | Per-rule | Correct IP per proxy |
 
@@ -600,7 +606,84 @@ dns:
 
 ---
 
-## 9. Limitations & Known Constraints
+## 9. Applying Rule Updates (Without Restarting Tunnels)
+
+When you add or remove domains from the routing rules (e.g. adding a new service to `config.yaml`), **only Mihomo needs to reload — the SSH tunnels must not be restarted**. The tunnels are stateless pipes that carry whatever traffic Mihomo sends through them; they have no knowledge of routing rules.
+
+### What needs restarting for each type of change
+
+| Change | Tunnel(s) | Mihomo |
+|---|---|---|
+| Add / remove a domain rule | No | **Yes — reload** |
+| Add a new proxy group | No | **Yes — reload** |
+| Add a new tunnel / region | **Yes — start the new tunnel service** | **Yes — reload** |
+| Fix a broken tunnel | **Yes — restart that tunnel** | No |
+| Change Mihomo TUN / DNS config | No | **Yes — restart** (TUN re-initialises) |
+
+### Linux
+
+```bash
+# 1. Edit config/config.yaml (or rules/*.txt) in the repo
+# 2. Reload Mihomo only -- tunnels stay connected
+sudo systemctl restart geoshift-mihomo.service
+
+# Confirm all three services are healthy
+sudo systemctl status geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service
+```
+
+Mihomo restart takes under 2 seconds. Active SSH tunnels on ports 1080/1081 are unaffected; Mihomo reconnects to them automatically on startup.
+
+If you are adding a **new region** for the first time (e.g. first-time JP setup after previously having US only):
+
+```bash
+# Start the new tunnel service (one-time)
+sudo systemctl enable --now geoshift-tunnel-jp.service
+
+# Then reload Mihomo
+sudo systemctl restart geoshift-mihomo.service
+```
+
+### Windows
+
+```powershell
+# 1. Edit config in the repo, then copy updated config.yaml to C:\ProgramData\GeoShift\config\
+#    (or re-run install.ps1 as Administrator to sync all files)
+
+# 2. Restart Mihomo task only -- tunnel tasks stay running
+Stop-ScheduledTask  -TaskName GeoShift-Mihomo
+Start-Sleep -Seconds 2
+Start-ScheduledTask -TaskName GeoShift-Mihomo
+
+# Confirm Mihomo process came back up
+Get-Process mihomo -ErrorAction SilentlyContinue
+```
+
+If you are starting the **JP tunnel for the first time** on Windows:
+
+```powershell
+# Register and start the JP tunnel task (install.ps1 handles this on a fresh install)
+# For existing installs, re-run install.ps1 as Administrator, then:
+Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
+
+# Then reload Mihomo
+Stop-ScheduledTask  -TaskName GeoShift-Mihomo
+Start-Sleep -Seconds 2
+Start-ScheduledTask -TaskName GeoShift-Mihomo
+```
+
+### Verifying the reload worked
+
+After restarting Mihomo, open the dashboard at `http://127.0.0.1:9090/ui` and check the Connections or Rules tab. New domain rules appear immediately. You can also smoke-test via curl:
+
+```bash
+# Linux / macOS / Git Bash
+curl -s --proxy socks5h://127.0.0.1:1081 https://api.ipify.org   # should show JP Lightsail IP
+curl -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # should show US Lightsail IP
+```
+
+---
+
+## 10. Limitations & Known Constraints
 
 | Constraint | Impact | Mitigation |
 |---|---|---|
@@ -614,9 +697,41 @@ dns:
 | TLS inspection not possible | Mihomo cannot inspect encrypted traffic content; routing is domain-based only | Not a limitation for this use case; geo-unblocking only needs to route the connection, not inspect it |
 | IPv6 leak risk | Some TUN implementations may not intercept IPv6 traffic | Disable IPv6 on the machine or ensure Mihomo's TUN config covers IPv6 |
 
+### IP Reputation Blocking — Services Beyond Geolocation
+
+Some Japanese and international streaming services (e.g. **DMM TV**, **NicoNico**) layer IP reputation checks **on top of** geolocation. The service detects:
+
+1. **Datacenter/cloud IP ranges** — ASNs like `AS16509 Amazon.com` are explicitly blacklisted
+2. **Known VPN/proxy IPs** — Residential ISP ASNs are whitelisted; commercial hosting is not
+
+**Example:** Using AWS Lightsail Tokyo (IP `13.158.135.166`, ASN `AS16509 Amazon.com`) appears to be in Tokyo geographically, but DMM's geo-check script (`navismithapis.com` and related) flags the `AS16509` ASN as a cloud provider and **blocks the request regardless of physical location**.
+
+**Verification:** Check the exit IP reputation with:
+```bash
+curl --socks5-hostname 127.0.0.1:<port> https://ipinfo.io/json | grep org
+```
+
+If the `org` field shows a **major cloud provider** (AWS, Google Cloud, Azure, etc.), services may block you despite correct geolocation.
+
+**Solutions (in order of likelihood to work):**
+
+| Option | Cost | Pros | Cons |
+|---|---|---|---|
+| **Japanese domestic VPS** (Sakura Internet, ConoHa) | ¥500–1000/month (~$3–7 USD) | Uses Japanese domestic ISP ASNs; excellent streaming reputation | Requires purchasing and configuring new instance |
+| **Oracle Cloud free tier** (Tokyo) | ¥0/month | Always-free tier; worth trying first | May still be flagged as cloud (Oracle ASN); less certain than domestic VPS |
+| **Keep paid VPN for affected services** (e.g. NordVPN Tokyo) | VPN subscription | Known to work; no infrastructure to maintain | Not integrated into GeoShift; manual switching per site |
+| **Other cloud providers** (Vultr, DigitalOcean, Linode) | $2.50–6/month | Cheaper than domestic VPS | Still cloud IPs; hit-or-miss with strict services like DMM |
+
+**Switching exit nodes:** If you choose a new Tokyo instance, update two lines in `geoshift.env` and restart the JP tunnel — no other configuration changes needed:
+```bash
+JP_LIGHTSAIL_IP=<new-ip>
+JP_SSH_PRIVATE_KEY=<path-to-new-key>
+sudo systemctl restart geoshift-tunnel-jp.service
+```
+
 ---
 
-## 10. Phase 2 — Windows Platform
+## 11. Phase 2 — Windows Platform
 
 ### Overview
 
@@ -630,6 +745,7 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 | `systemd` service units | Task Scheduler tasks (SYSTEM account) | Run at boot, no UAC, no console window |
 | `install.sh` | `install.ps1` | One-shot, run as Administrator |
 | `tunnel-us.sh` | `tunnel-us.ps1` | Same SSH flags, `-D 1080` SOCKS5 |
+| `tunnel-jp.sh` | `tunnel-jp.ps1` | Same SSH flags, `-D 1081` SOCKS5 |
 | `mihomo-run.sh` | `mihomo-run.ps1` | Both use **`mihomo -d <configDir>`** only; Windows wrapper redirects stdout/stderr to log files (Mihomo has no `--log-file` flag) |
 | `/etc/geoshift/geoshift.env` | `C:\ProgramData\GeoShift\geoshift.env` | Same key=value format |
 | `/usr/local/lib/geoshift/` | `C:\Program Files\GeoShift\` | Scripts + mihomo.exe + wintun.dll |
@@ -652,8 +768,10 @@ Phase 2 ports GeoShift to Windows 10/11 using the **same `config.yaml` and rule 
 | Env file | `C:\ProgramData\GeoShift\geoshift.env` |
 | SSH key (recommended for Task Scheduler) | `C:\ProgramData\GeoShift\ssh-keys\*.pem` (ACL: SYSTEM read only) |
 | Mihomo config | `C:\ProgramData\GeoShift\config\config.yaml` |
-| Tunnel log | `C:\ProgramData\GeoShift\logs\tunnel-us.log` |
-| Tunnel SSH stderr (raw) | `C:\ProgramData\GeoShift\logs\tunnel-us-ssh.err` |
+| US tunnel log | `C:\ProgramData\GeoShift\logs\tunnel-us.log` |
+| US tunnel SSH stderr (raw) | `C:\ProgramData\GeoShift\logs\tunnel-us-ssh.err` |
+| JP tunnel log | `C:\ProgramData\GeoShift\logs\tunnel-jp.log` |
+| JP tunnel SSH stderr (raw) | `C:\ProgramData\GeoShift\logs\tunnel-jp-ssh.err` |
 | Mihomo wrapper log | `C:\ProgramData\GeoShift\logs\mihomo.log` |
 | Mihomo core log | `C:\ProgramData\GeoShift\logs\mihomo-core.log` |
 | Mihomo stderr (on failure) | `C:\ProgramData\GeoShift\logs\mihomo-stderr.log` (also copied into `mihomo.log` by `mihomo-run.ps1`) |
@@ -669,9 +787,10 @@ Both tasks run as **SYSTEM** with highest privileges — no UAC prompts, no visi
 | Task Name | Script | Trigger | Restart |
 |---|---|---|---|
 | `GeoShift-Tunnel-US` | `tunnel-us.ps1` | At startup + **30 s delay** | On failure, **1 minute** delay, unlimited |
+| `GeoShift-Tunnel-JP` | `tunnel-jp.ps1` | At startup + **30 s delay** | On failure, **1 minute** delay, unlimited |
 | `GeoShift-Mihomo` | `mihomo-run.ps1` | At startup + **40 s delay** | On failure, **1 minute** delay, unlimited |
 
-The 30 s delay on `GeoShift-Tunnel-US` lets the NIC acquire an IP before `ssh.exe` attempts to connect (otherwise the first connection attempt always fails at early boot). The extra 10 s on `GeoShift-Mihomo` ensures the tunnel is up before Mihomo starts (replaces `After=geoshift-tunnel-us.service`).
+The 30 s delay on both tunnel tasks lets the NIC acquire an IP before `ssh.exe` attempts to connect. The extra 10 s on `GeoShift-Mihomo` ensures both tunnels are up before Mihomo starts. US and JP tunnels run independently — a JP tunnel failure does not affect US traffic.
 
 > **Note:** `install.ps1` applies these delays automatically. If your tasks were registered with an older version, run `scripts\fix-windows.ps1` (see [Applying fixes to existing installations](#applying-fixes-to-existing-installations)).
 
@@ -720,8 +839,10 @@ After the script completes, restart the tasks or reboot:
 
 ```powershell
 Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-JP
 Stop-ScheduledTask  -TaskName GeoShift-Mihomo
 Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
 Start-ScheduledTask -TaskName GeoShift-Mihomo
 ```
 
@@ -753,13 +874,19 @@ This section summarizes issues that commonly appear when bringing up GeoShift on
 
 #### Task Scheduler **State** column
 
-- **`GeoShift-Tunnel-US` = Running** is expected while the tunnel is up (`tunnel-us.ps1` blocks inside a reconnect loop).
+- **`GeoShift-Tunnel-US` / `GeoShift-Tunnel-JP` = Running** is expected while each tunnel is up (both scripts block inside a reconnect loop). They run independently — one can restart without affecting the other.
 - **`GeoShift-Mihomo` = Ready** means the **scheduled action finished** (wrapper exited), not necessarily that Mihomo is down. If `mihomo.exe` is still running, the task may show **Running**; if Mihomo exited, **Ready** is normal. Use **`Get-Process mihomo`** to confirm.
 
 #### Verifying US egress over SOCKS
 
 - Some sites return **IPv6**; for a clear **IPv4** check:  
   `curl.exe -s --max-time 20 --proxy socks5h://127.0.0.1:1080 https://api.ipify.org`
+
+#### Verifying JP egress over SOCKS
+
+- JP tunnel binds on port **1081**:  
+  `curl.exe -s --max-time 20 --proxy socks5h://127.0.0.1:1081 https://api.ipify.org`  
+  The returned IP should match your JP Lightsail static IP (`13.158.135.166`).
 
 #### Updating scripts after `git pull`
 
@@ -826,8 +953,8 @@ Get-ScheduledTask -TaskName GeoShift-Mihomo | Get-ScheduledTaskInfo
 ```
 
 **Expected output:**
-- Two tasks listed: `GeoShift-Tunnel-US` and `GeoShift-Mihomo`
-- While healthy, **`GeoShift-Tunnel-US` often shows `State=Running`** (long-running `ssh` loop). **`GeoShift-Mihomo` may show `Ready`** after the wrapper exits even if you expect Mihomo to be up; use **`Get-Process mihomo`** to confirm the process. When Mihomo is running under the wrapper, its task may show **Running**.
+- Three tasks listed: `GeoShift-Tunnel-US`, `GeoShift-Tunnel-JP`, and `GeoShift-Mihomo`
+- While healthy, **both tunnel tasks often show `State=Running`** (each blocks inside a reconnect loop). They are independent — one can be restarted without affecting the other. **`GeoShift-Mihomo` may show `Ready`** after the wrapper exits even if you expect Mihomo to be up; use **`Get-Process mihomo`** to confirm the process. When Mihomo is running under the wrapper, its task may show **Running**.
 - Task info: no persistent failures (`LastTaskResult = 0` after successful runs; `NextRunTime` as appropriate for startup triggers)
 
 **If failed:**
@@ -879,19 +1006,20 @@ Set-Acl $key $acl
 Open PowerShell **as Administrator** and run:
 
 ```powershell
-# Start tunnel first
+# Start both tunnels first (independent -- JP failure will not affect US)
 Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
 Start-Sleep -Seconds 3
 
 # Start Mihomo (waits 10s by default, but may start immediately if manual)
 Start-ScheduledTask -TaskName GeoShift-Mihomo
 Start-Sleep -Seconds 5
 
-# Check if processes are running
+# Check if processes are running (two ssh.exe instances expected: one per tunnel)
 Get-Process | Where-Object { $_.Name -match 'ssh|mihomo' }
 ```
 
-**Expected output:** `ssh.exe` and `mihomo.exe` processes listed.
+**Expected output:** Two `ssh.exe` processes (US + JP tunnels) and `mihomo.exe` listed.
 
 **If no processes:** Check logs (Step 7) for errors.
 
@@ -922,9 +1050,13 @@ curl.exe https://ifconfig.me
 #### Step 7: Check Logs for Errors
 
 ```powershell
-# View tunnel log (last 20 lines)
-Write-Host "=== Tunnel Log ==="
+# View US tunnel log (last 20 lines)
+Write-Host "=== US Tunnel Log ==="
 Get-Content 'C:\ProgramData\GeoShift\logs\tunnel-us.log' -Tail 20
+
+# View JP tunnel log
+Write-Host "=== JP Tunnel Log ==="
+Get-Content 'C:\ProgramData\GeoShift\logs\tunnel-jp.log' -Tail 20
 
 # View Mihomo wrapper log
 Write-Host "=== Mihomo Wrapper Log ==="
@@ -1028,6 +1160,7 @@ If something goes wrong and you need to reset:
 ```powershell
 # Stop services
 Stop-ScheduledTask -TaskName GeoShift-Tunnel-US -ErrorAction SilentlyContinue
+Stop-ScheduledTask -TaskName GeoShift-Tunnel-JP -ErrorAction SilentlyContinue
 Stop-ScheduledTask -TaskName GeoShift-Mihomo -ErrorAction SilentlyContinue
 
 # Kill processes if stuck
@@ -1044,9 +1177,11 @@ Remove-Item 'C:\ProgramData\GeoShift\logs\*' -Force -ErrorAction SilentlyContinu
 ```powershell
 Stop-ScheduledTask  -TaskName GeoShift-Mihomo
 Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
+Stop-ScheduledTask  -TaskName GeoShift-Tunnel-JP
 # To disable permanently:
 Disable-ScheduledTask -TaskName GeoShift-Mihomo
 Disable-ScheduledTask -TaskName GeoShift-Tunnel-US
+Disable-ScheduledTask -TaskName GeoShift-Tunnel-JP
 ```
 
 ### Optional Hardening
@@ -1061,4 +1196,4 @@ Disable-ScheduledTask -TaskName GeoShift-Tunnel-US
 
 ---
 
-*Last updated: March 2026 (Windows troubleshooting expanded; fix-windows.ps1 added for existing installations; SSH key owner fix and task startup-delay/battery fixes documented.)*
+*Last updated: April 2026 (JP tunnel added: tunnel-jp.sh/ps1, geoshift-tunnel-jp.service, GeoShift-Tunnel-JP task; JP routing rules added for DMM/FANZA, NicoNico, Pixiv, TVer, Attackers, Ideapockets, Faleno; Shudder added to US rules; new §9 "Applying Rule Updates" runbook documents which services to restart for rule-only vs. infrastructure changes.)*
