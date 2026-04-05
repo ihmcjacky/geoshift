@@ -688,24 +688,25 @@ sudo systemctl restart geoshift-tunnel-us.service geoshift-tunnel-jp.service geo
 
 ### Windows
 
+> **Important:** Stop `GeoShift-Mihomo` before re-running `install.ps1`. Windows locks running `.exe` files, so `install.ps1` cannot overwrite `mihomo.exe` while the process is active. The tunnel tasks can stay running.
+
 ```powershell
-# In the repo directory:
+# 1. Stop Mihomo first (tunnels can stay running)
+Stop-ScheduledTask -TaskName GeoShift-Mihomo
+
+# 2. Pull and re-install (as Administrator)
 git pull
-
-# Then as Administrator:
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
-```
 
-`install.ps1` always overwrites the config and scripts in `C:\Program Files\GeoShift\` on re-run. After the upgrade, restart the scheduled tasks:
-
-```powershell
-Stop-ScheduledTask  -TaskName GeoShift-Mihomo
+# 3. Restart everything to pick up new scripts and config
 Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US
 Stop-ScheduledTask  -TaskName GeoShift-Tunnel-JP
 Start-ScheduledTask -TaskName GeoShift-Tunnel-US
 Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
 Start-ScheduledTask -TaskName GeoShift-Mihomo
 ```
+
+`install.ps1` always overwrites the config and scripts in `C:\Program Files\GeoShift\` on re-run.
 
 ---
 

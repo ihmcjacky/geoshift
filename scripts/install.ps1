@@ -1,4 +1,4 @@
-# GeoShift Windows Installer. Run once as Administrator.
+﻿# GeoShift Windows Installer. Run once as Administrator.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 #Requires -RunAsAdministrator
@@ -139,8 +139,10 @@ if (-not (Test-Path $EnvFile)) {
         @"
 # GeoShift environment - fill in before starting services
 US_LIGHTSAIL_IP=your.us.lightsail.ipv4
-SSH_PRIVATE_KEY=C:\Users\$env:USERNAME\.ssh\lightsail.pem
+SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\LightsailDefaultKey-us-east-2.pem
 SSH_USER=ubuntu
+JP_LIGHTSAIL_IP=your.jp.lightsail.ipv4
+JP_SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\LightsailDefaultKey-ap-northeast-1.pem
 GEOSHIFT_CONFIG_DIR=$ConfigDir
 "@ | Set-Content $EnvFile
     }
@@ -149,29 +151,40 @@ GEOSHIFT_CONFIG_DIR=$ConfigDir
     Write-Host "  $EnvFile already exists, not overwriting"
 }
 
-# -- Step 5b: Fix SSH key permissions if key path is already set in env -------
+# -- Step 5b: Fix SSH key permissions for both US and JP keys -----------------
 # This handles re-runs of install.ps1 after the user has populated geoshift.env.
-$envSshKey = $null
+$envUsKey = $null
+$envJpKey = $null
 if (Test-Path $EnvFile) {
     foreach ($line in Get-Content $EnvFile) {
         $line = $line.Trim()
         if ($line -match '^\s*#' -or $line -eq '') { continue }
         if ($line -match '^SSH_PRIVATE_KEY\s*=\s*(.+)$') {
             $candidate = $Matches[1].Trim().Trim('"')
-            # Skip placeholder / Linux-style paths
-            if ($candidate -notmatch 'your\.|placeholder|^/' -and $candidate -match '^[A-Za-z]:\\') {
-                $envSshKey = $candidate
+            if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
+                $envUsKey = $candidate
             }
-            break
+        }
+        if ($line -match '^JP_SSH_PRIVATE_KEY\s*=\s*(.+)$') {
+            $candidate = $Matches[1].Trim().Trim('"')
+            if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
+                $envJpKey = $candidate
+            }
         }
     }
 }
-if ($envSshKey) {
-    info "Fixing SSH key permissions for SYSTEM"
-    Set-SshKeyPermissionsForSystem -KeyPath $envSshKey
+info "Fixing SSH key permissions for SYSTEM"
+if ($envUsKey) {
+    Set-SshKeyPermissionsForSystem -KeyPath $envUsKey
 } else {
-    Write-Host "  SSH_PRIVATE_KEY not yet configured in $EnvFile; skipping key permission step"
-    Write-Host "  Re-run install.ps1 after setting SSH_PRIVATE_KEY, or call Set-SshKeyPermissionsForSystem manually."
+    Write-Host "  SSH_PRIVATE_KEY not set to a Windows path in $EnvFile; skipping US key"
+    Write-Host "  Re-run install.ps1 after setting SSH_PRIVATE_KEY to a Windows path."
+}
+if ($envJpKey) {
+    Set-SshKeyPermissionsForSystem -KeyPath $envJpKey
+} else {
+    Write-Host "  JP_SSH_PRIVATE_KEY not set to a Windows path in $EnvFile; skipping JP key"
+    Write-Host "  Re-run install.ps1 after setting JP_SSH_PRIVATE_KEY to a Windows path."
 }
 
 # -- Step 6: Copy config (always overwrite on re-runs) ------------------------

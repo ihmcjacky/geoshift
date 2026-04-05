@@ -1,4 +1,4 @@
-# GeoShift Windows fix script - run once as Administrator on any existing installation.
+﻿# GeoShift Windows fix script - run once as Administrator on any existing installation.
 # Applies three fixes:
 #   1. SSH key file owner -> NT AUTHORITY\SYSTEM  (fixes "Permission denied (publickey)")
 #   2. Scheduled tasks allowed to start on battery  (fixes task not auto-starting on boot)
@@ -20,29 +20,18 @@ function warn  { param([string]$m) Write-Host "  WARN $m" -ForegroundColor Yello
 # ---------------------------------------------------------------------------
 info "Fix 1: SSH key file owner -> NT AUTHORITY\SYSTEM"
 
-$keyPath = $null
-if (Test-Path $EnvFile) {
-    foreach ($line in Get-Content $EnvFile) {
-        $line = $line.Trim()
-        if ($line -match '^\s*#' -or $line -eq '') { continue }
-        if ($line -match '^SSH_PRIVATE_KEY\s*=\s*(.+)$') {
-            $candidate = $Matches[1].Trim().Trim('"')
-            if ($candidate -notmatch 'your\.|placeholder|^/' -and $candidate -match '^[A-Za-z]:\\') {
-                $keyPath = $candidate
-            }
-            break
-        }
+function Fix-SshKeyPermissions {
+    param([string]$KeyVar, [string]$KeyPath)
+    if (-not $KeyPath) {
+        warn "$KeyVar not set to a Windows path in $EnvFile - skipping."
+        return
     }
-}
-
-if (-not $keyPath) {
-    warn "SSH_PRIVATE_KEY not set to a Windows path in $EnvFile - skipping key fix."
-    warn "Set SSH_PRIVATE_KEY and re-run this script."
-} elseif (-not (Test-Path $keyPath)) {
-    warn "Key file not found: $keyPath - skipping."
-} else {
+    if (-not (Test-Path $KeyPath)) {
+        warn "$KeyVar key file not found: $KeyPath - skipping."
+        return
+    }
     try {
-        $acl = Get-Acl $keyPath
+        $acl = Get-Acl $KeyPath
 
         # Change owner to SYSTEM
         $systemSid     = [System.Security.Principal.SecurityIdentifier]'S-1-5-18'
@@ -58,12 +47,37 @@ if (-not $keyPath) {
             $systemSid, 'Read', 'None', 'None', 'Allow')
         $acl.AddAccessRule($rule)
 
-        Set-Acl $keyPath $acl
-        ok "Owner=SYSTEM, ACL=SYSTEM:Read  ($keyPath)"
+        Set-Acl $KeyPath $acl
+        ok "Owner=SYSTEM, ACL=SYSTEM:Read  ($KeyPath)"
     } catch {
-        warn "Could not fix key permissions: $_"
+        warn "Could not fix key permissions for ${KeyVar}: $_"
     }
 }
+
+# Read both key paths from env file
+$usKeyPath = $null
+$jpKeyPath = $null
+if (Test-Path $EnvFile) {
+    foreach ($line in Get-Content $EnvFile) {
+        $line = $line.Trim()
+        if ($line -match '^\s*#' -or $line -eq '') { continue }
+        if ($line -match '^SSH_PRIVATE_KEY\s*=\s*(.+)$') {
+            $candidate = $Matches[1].Trim().Trim('"')
+            if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
+                $usKeyPath = $candidate
+            }
+        }
+        if ($line -match '^JP_SSH_PRIVATE_KEY\s*=\s*(.+)$') {
+            $candidate = $Matches[1].Trim().Trim('"')
+            if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
+                $jpKeyPath = $candidate
+            }
+        }
+    }
+}
+
+Fix-SshKeyPermissions -KeyVar 'SSH_PRIVATE_KEY'    -KeyPath $usKeyPath
+Fix-SshKeyPermissions -KeyVar 'JP_SSH_PRIVATE_KEY' -KeyPath $jpKeyPath
 
 # ---------------------------------------------------------------------------
 # Fix 2 + 3: Task battery settings and startup delays
@@ -72,6 +86,7 @@ info "Fix 2+3: Scheduled task battery flags and startup delays"
 
 $tasks = @(
     @{ Name = 'GeoShift-Tunnel-US'; Delay = 'PT30S' }
+    @{ Name = 'GeoShift-Tunnel-JP'; Delay = 'PT30S' }
     @{ Name = 'GeoShift-Mihomo';    Delay = 'PT40S' }
 )
 
@@ -98,8 +113,10 @@ Write-Host ''
 Write-Host 'All fixes applied.' -ForegroundColor Green
 Write-Host 'Restart the tasks to pick up the changes:'
 Write-Host '  Stop-ScheduledTask  -TaskName GeoShift-Tunnel-US'
+Write-Host '  Stop-ScheduledTask  -TaskName GeoShift-Tunnel-JP'
 Write-Host '  Stop-ScheduledTask  -TaskName GeoShift-Mihomo'
 Write-Host '  Start-ScheduledTask -TaskName GeoShift-Tunnel-US'
+Write-Host '  Start-ScheduledTask -TaskName GeoShift-Tunnel-JP'
 Write-Host '  Start-ScheduledTask -TaskName GeoShift-Mihomo'
 Write-Host ''
 Write-Host 'Or simply reboot - tasks will start 30/40 s after Windows boots.'
