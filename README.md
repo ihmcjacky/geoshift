@@ -73,11 +73,11 @@ Complete these **on the Ubuntu machine** that will run Mihomo and autossh. Skip 
 | Step | What to prepare |
 |------|------------------|
 | **1. Lightsail** | US + JP instances (Ubuntu), **static IPv4** each; **networking / firewall** allows **TCP 22** from wherever this Ubuntu host connects (your public IP or office IP). |
-| **2. SSH** | Private key on this machine (e.g. `~/.ssh/lightsail.pem`, `chmod 600`). Verify `ssh -i … ubuntu@<US_IP>` and `ssh -i … ubuntu@<JP_IP>` **from this Ubuntu box**. |
+| **2. SSH** | Private keys for both Lightsail instances, centralized in `~/.ssh/` (e.g. `~/.ssh/LightsailDefaultKey-us-east-2.pem`, `~/.ssh/LightsailDefaultKey-ap-tokyo-northeast-1.pem`, `chmod 600` each). Verify `ssh -i ~/.ssh/LightsailDefaultKey-us-east-2.pem ubuntu@<US_IP>` and `ssh -i ~/.ssh/LightsailDefaultKey-ap-tokyo-northeast-1.pem ubuntu@<JP_IP>` **from this Ubuntu box**. Reference copies (for documentation) can also be kept in the repo (they are `.gitignore`'d). |
 | **3. Packages** | `autossh`, `curl` (and any clients you will test: browser, VS Code, Claude CLI, etc.). |
 | **4. Mihomo** | Linux **mihomo** binary (match your CPU: x86_64 or arm64), install path agreed (e.g. `/usr/local/bin/mihomo`). |
 | **5. sudo** | For `setcap` on the Mihomo binary (TUN without root) and for installing **systemd** units under `/etc/systemd/system/`. |
-| **6. Local secrets** | Non-git file for IPs + key path (e.g. `geoshift.env` or `config.local.yaml`) — referenced by scripts/units; never commit keys. |
+| **6. Local secrets** | `geoshift.env` with Lightsail IPs and SSH key paths (e.g. `SSH_PRIVATE_KEY=~/.ssh/LightsailDefaultKey-us-east-2.pem`). Referenced by scripts/units; never commit. Keys themselves always in `~/.ssh/` for security and standardization. |
 | **7. IPv6 (optional)** | Note whether you disable IPv6 or rely on Mihomo TUN IPv6 support (see §9). |
 
 **Phase 2 (later) — prepare when starting Windows:** WinTun (`wintun.dll`), Mihomo Windows build, Administrator or Task Scheduler elevation, and WSL2 vs native tunnel strategy.
