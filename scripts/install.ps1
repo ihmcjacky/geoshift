@@ -235,13 +235,12 @@ function Register-GeoShiftTask {
         Principal = $principal
         Force     = $true
     }
-    Register-ScheduledTask @params | Out-Null
+    $registered = Register-ScheduledTask @params
 
     # PowerShell 5.1 / Register-ScheduledTask does not reliably persist the
     # battery flags from New-ScheduledTaskSettingsSet. Patch them via
     # Set-ScheduledTask immediately after registration to guarantee the task
     # starts on battery and does not stop when the machine goes onto battery.
-    $registered = Get-ScheduledTask -TaskName $TaskName
     $registered.Settings.DisallowStartIfOnBatteries = $false
     $registered.Settings.StopIfGoingOnBatteries      = $false
     Set-ScheduledTask -InputObject $registered | Out-Null

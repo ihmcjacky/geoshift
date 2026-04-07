@@ -38,3 +38,8 @@ payload:
   - DOMAIN-SUFFIX,primevideo.com
   - DOMAIN-SUFFIX,aiv-cdn.net
   - DOMAIN-SUFFIX,amazonvideo.com
+  - DOMAIN-SUFFIX,gitlab.com
+  - DOMAIN-SUFFIX,gitlab.io
+  - DOMAIN-SUFFIX,gitlab.net
+  - DOMAIN-SUFFIX,gitlab-static.net
+  - DOMAIN-SUFFIX,gitlabusercontent.com
