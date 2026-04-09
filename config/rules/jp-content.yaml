@@ -42,8 +42,11 @@ payload:
   - DOMAIN-SUFFIX,winticket.jp
   - DOMAIN-SUFFIX,abematv.akamaized.net
   - DOMAIN-SUFFIX,ds-linear-abematv.akamaized.net
+  - DOMAIN-SUFFIX,ds-glb-linear-abematv.akamaized.net
   - DOMAIN-SUFFIX,ds-vod-abematv.akamaized.net
   - DOMAIN-SUFFIX,linear-abematv.akamaized.net
   - DOMAIN-SUFFIX,vod-abematv.akamaized.net
   - DOMAIN,d1otoma47x30pg.cloudfront.net
   - DOMAIN,d2wy8f7a9ursnm.cloudfront.net
+  - DOMAIN-SUFFIX,justwatch.com
+  - DOMAIN-SUFFIX,imagedelivery.net
