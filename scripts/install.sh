@@ -33,6 +33,7 @@ sudo setcap cap_net_admin,cap_net_bind_service+ep "$MIHOMO_INSTALL"
 
 echo "==> GeoShift lib + env symlink"
 sudo install -d -m 0755 /usr/local/lib/geoshift
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-paths.sh" /usr/local/lib/geoshift/geoshift-paths.sh
 sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh"     /usr/local/lib/geoshift/tunnel-us.sh
 sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-jp.sh"     /usr/local/lib/geoshift/tunnel-jp.sh
 sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh"    /usr/local/lib/geoshift/mihomo-run.sh

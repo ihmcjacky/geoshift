@@ -9,5 +9,4 @@ config/cache.db
 
 # metacubexd / external-ui files from POST /upgrade/ui
 config/ui/
-
 *.pem

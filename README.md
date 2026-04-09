@@ -62,6 +62,7 @@ The previous project ([aws-vpn-tunnel-for-claude-ai](https://github.com/ihmcjack
 | Phase | Platform | When |
 |-------|----------|------|
 | **Phase 1** | **Ubuntu** | **Now:** implement and validate Tasks 1–8 on the Linux test machine end-to-end. |
+| **Phase 1b** | **macOS** | Same stack as Linux: `scripts/install-macos.sh`, **LaunchAgent** (user) for autossh, **LaunchDaemon** (root) for Mihomo TUN — no `setcap`; TUN needs root on Darwin. |
 | **Phase 2** | Windows | **After** Phase 1 passes: port tunnels, Mihomo + WinTun, PowerShell / Task Scheduler, re-run the test matrix. |
 
 The same `config.yaml` and rule lists are intended to work on both OSes eventually; only automation and TUN prerequisites differ. **Do not** block Phase 1 on WinTun, WSL2, or Windows Administrator setup.
@@ -79,6 +80,17 @@ Complete these **on the Ubuntu machine** that will run Mihomo and autossh. Skip 
 | **5. sudo** | For `setcap` on the Mihomo binary (TUN without root) and for installing **systemd** units under `/etc/systemd/system/`. |
 | **6. Local secrets** | `geoshift.env` with Lightsail IPs and SSH key paths (e.g. `SSH_PRIVATE_KEY=~/.ssh/LightsailDefaultKey-us-east-2.pem`). Referenced by scripts/units; never commit. Keys themselves always in `~/.ssh/` for security and standardization. |
 | **7. IPv6 (optional)** | Note whether you disable IPv6 or rely on Mihomo TUN IPv6 support (see §9). |
+
+### Prerequisites — macOS (Phase 1b)
+
+| Step | What to prepare |
+|------|------------------|
+| **1–2. Lightsail + SSH** | Same as Ubuntu; verify `ssh` from the Mac. |
+| **3. Packages** | [Homebrew](https://brew.sh): `brew install autossh jq` (installer can install autossh if brew is present). |
+| **4. Mihomo** | `mihomo-darwin-arm64` or `mihomo-darwin-amd64` via `scripts/install-macos.sh` → `/usr/local/bin/mihomo`. |
+| **5. Privileges** | **No** Linux `setcap`. Mihomo runs as **root** via `/Library/LaunchDaemons/io.geoshift.mihomo.plist`; autossh runs as **you** via `~/Library/LaunchAgents/io.geoshift.tunnel-us.plist` (SSH keys stay user-owned). |
+| **6. Local secrets** | Default env path: `~/.config/geoshift/geoshift.env` (see `geoshift.env.example`). |
+| **7. IPv6** | Optional; sysctl differs from Linux — validate with leak tests if you rely on TUN for DNS. |
 
 **Phase 2 (later) — prepare when starting Windows:** WinTun (`wintun.dll`), Mihomo Windows build, Administrator or Task Scheduler elevation, and WSL2 vs native tunnel strategy.
 
@@ -685,6 +697,8 @@ sudo systemctl restart geoshift-tunnel-us.service geoshift-tunnel-jp.service geo
 ```
 
 `install.sh` is idempotent — re-running it copies updated scripts to `/usr/local/lib/geoshift/` and installs the `geoshift` CLI to `/usr/local/bin/geoshift`. The `git pull` updates `config.yaml` and the rule files in-place (Mihomo reads them directly from the repo directory).
+
+After `git pull`, if anything under `scripts/` changed, run `bash scripts/install.sh` again on the Linux host so `/usr/local/lib/geoshift/` (including shared helpers such as `geoshift-paths.sh`) stays in sync with the repo before restarting services.
 
 ### Windows
 

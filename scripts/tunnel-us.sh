@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENV_FILE="${GEOSHIFT_ENV_FILE:-/etc/geoshift/geoshift.env}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=geoshift-paths.sh
+source "$SCRIPT_DIR/geoshift-paths.sh"
+
+ENV_FILE="$(geoshift_default_env_file)"
 if [[ ! -r "$ENV_FILE" ]]; then
-  echo "geoshift: missing or unreadable $ENV_FILE" >&2
+  echo "geoshift: missing or unreadable $ENV_FILE (set GEOSHIFT_ENV_FILE or create the file)" >&2
   exit 1
 fi
 
