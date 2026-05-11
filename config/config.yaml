@@ -1,4 +1,4 @@
-# GeoShift — Mihomo (US exit only). Upstream: SOCKS5 127.0.0.1:1080 (autossh → Lightsail).
+# GeoShift — Mihomo proxy config. Upstreams: SOCKS5 127.0.0.1:1080 (US tunnel), 127.0.0.1:1081 (JP tunnel).
 # Dashboard / API: external-controller binds 127.0.0.1:9090 only (not reachable from LAN/internet).
 
 mode: rule
@@ -39,12 +39,12 @@ socks-port: 7891
 allow-lan: false
 
 proxies:
-  - name: US-Lightsail
+  - name: US-TUNNEL
     type: socks5
     server: 127.0.0.1
     port: 1080
     udp: true
-  - name: JP-Lightsail
+  - name: JP-TUNNEL
     type: socks5
     server: 127.0.0.1
     port: 1081
@@ -54,12 +54,12 @@ proxy-groups:
   - name: US-PROXY
     type: select
     proxies:
-      - US-Lightsail
+      - US-TUNNEL
       - DIRECT
   - name: JP-PROXY
     type: select
     proxies:
-      - JP-Lightsail
+      - JP-TUNNEL
       - DIRECT
 
 # Rule sets loaded from files in config/rules/.
