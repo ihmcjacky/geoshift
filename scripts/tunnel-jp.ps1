@@ -1,4 +1,4 @@
-﻿# GeoShift: Persistent SSH SOCKS5 tunnel to JP Lightsail on localhost:1081.
+﻿# GeoShift: Persistent SSH SOCKS5 tunnel to JP exit node on localhost:1081.
 # Runs as SYSTEM via Task Scheduler. Do not run interactively unless testing.
 
 $ErrorActionPreference = 'Stop'
@@ -40,12 +40,12 @@ if (-not (Test-Path $EnvFile)) {
 
 $env = Read-EnvFile $EnvFile
 
-$lightsailIp = $env['JP_LIGHTSAIL_IP']
-$sshKey      = $env['JP_SSH_PRIVATE_KEY']
+$lightsailIp = $env['JP_HOST']
+$sshKey      = $env['JP_SSH_KEY']
 $sshUser     = if ($env['SSH_USER']) { $env['SSH_USER'] } else { 'ubuntu' }
 
-if (-not $lightsailIp) { Write-Log "ERROR: JP_LIGHTSAIL_IP not set in $EnvFile"; exit 1 }
-if (-not $sshKey)      { Write-Log "ERROR: JP_SSH_PRIVATE_KEY not set in $EnvFile"; exit 1 }
+if (-not $lightsailIp) { Write-Log "ERROR: JP_HOST not set in $EnvFile"; exit 1 }
+if (-not $sshKey)      { Write-Log "ERROR: JP_SSH_KEY not set in $EnvFile"; exit 1 }
 if (-not (Test-Path $sshKey)) { Write-Log "ERROR: SSH key not found: $sshKey"; exit 1 }
 
 Write-Log "Starting JP tunnel to ${sshUser}@${lightsailIp}"

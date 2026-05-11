@@ -138,11 +138,11 @@ if (-not (Test-Path $EnvFile)) {
     } else {
         @"
 # GeoShift environment - fill in before starting services
-US_LIGHTSAIL_IP=your.us.lightsail.ipv4
-SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\LightsailDefaultKey-us-east-2.pem
+US_HOST=your.us.exit.ipv4
+US_SSH_KEY=C:\ProgramData\GeoShift\ssh-keys\us-key.pem
 SSH_USER=ubuntu
-JP_LIGHTSAIL_IP=your.jp.lightsail.ipv4
-JP_SSH_PRIVATE_KEY=C:\ProgramData\GeoShift\ssh-keys\LightsailDefaultKey-ap-northeast-1.pem
+JP_HOST=your.jp.exit.ipv4
+JP_SSH_KEY=C:\ProgramData\GeoShift\ssh-keys\jp-key.pem
 GEOSHIFT_CONFIG_DIR=$ConfigDir
 "@ | Set-Content $EnvFile
     }
@@ -159,13 +159,13 @@ if (Test-Path $EnvFile) {
     foreach ($line in Get-Content $EnvFile) {
         $line = $line.Trim()
         if ($line -match '^\s*#' -or $line -eq '') { continue }
-        if ($line -match '^SSH_PRIVATE_KEY\s*=\s*(.+)$') {
+        if ($line -match '^US_SSH_KEY\s*=\s*(.+)$') {
             $candidate = $Matches[1].Trim().Trim('"')
             if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
                 $envUsKey = $candidate
             }
         }
-        if ($line -match '^JP_SSH_PRIVATE_KEY\s*=\s*(.+)$') {
+        if ($line -match '^JP_SSH_KEY\s*=\s*(.+)$') {
             $candidate = $Matches[1].Trim().Trim('"')
             if ($candidate -notmatch 'your\.|placeholder|^[/~]' -and $candidate -match '^[A-Za-z]:\\') {
                 $envJpKey = $candidate
@@ -177,14 +177,14 @@ info "Fixing SSH key permissions for SYSTEM"
 if ($envUsKey) {
     Set-SshKeyPermissionsForSystem -KeyPath $envUsKey
 } else {
-    Write-Host "  SSH_PRIVATE_KEY not set to a Windows path in $EnvFile; skipping US key"
-    Write-Host "  Re-run install.ps1 after setting SSH_PRIVATE_KEY to a Windows path."
+    Write-Host "  US_SSH_KEY not set to a Windows path in $EnvFile; skipping US key"
+    Write-Host "  Re-run install.ps1 after setting US_SSH_KEY to a Windows path."
 }
 if ($envJpKey) {
     Set-SshKeyPermissionsForSystem -KeyPath $envJpKey
 } else {
-    Write-Host "  JP_SSH_PRIVATE_KEY not set to a Windows path in $EnvFile; skipping JP key"
-    Write-Host "  Re-run install.ps1 after setting JP_SSH_PRIVATE_KEY to a Windows path."
+    Write-Host "  JP_SSH_KEY not set to a Windows path in $EnvFile; skipping JP key"
+    Write-Host "  Re-run install.ps1 after setting JP_SSH_KEY to a Windows path."
 }
 
 # -- Step 6: Copy config (always overwrite on re-runs) ------------------------

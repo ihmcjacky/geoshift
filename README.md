@@ -774,8 +774,8 @@ If the `org` field shows a **major cloud provider** (AWS, Google Cloud, Azure, e
 
 **Switching exit nodes:** If you choose a new Tokyo instance, update two lines in `geoshift.env` and restart the JP tunnel — no other configuration changes needed:
 ```bash
-JP_LIGHTSAIL_IP=<new-ip>
-JP_SSH_PRIVATE_KEY=<path-to-new-key>
+JP_HOST=<new-ip>
+JP_SSH_KEY=<path-to-new-key>
 sudo systemctl restart geoshift-tunnel-jp.service
 ```
 

@@ -12,8 +12,8 @@ set -a
 source "$ENV_FILE"
 set +a
 
-: "${US_LIGHTSAIL_IP:?US_LIGHTSAIL_IP not set in $ENV_FILE}"
-: "${SSH_PRIVATE_KEY:?SSH_PRIVATE_KEY not set in $ENV_FILE}"
+: "${US_HOST:?US_HOST not set in $ENV_FILE}"
+: "${US_SSH_KEY:?US_SSH_KEY not set in $ENV_FILE}"
 : "${SSH_USER:=ubuntu}"
 
 # sync rules before connecting (non-fatal: cached rules used if download fails)
@@ -21,8 +21,8 @@ set +a
   echo "geoshift: rule sync failed, starting with cached rules" >&2
 
 exec /usr/bin/autossh -M 0 -N -D 1080 \
-  -i "$SSH_PRIVATE_KEY" \
+  -i "$US_SSH_KEY" \
   -o StrictHostKeyChecking=accept-new \
   -o ServerAliveInterval=30 \
   -o ServerAliveCountMax=3 \
-  "${SSH_USER}@${US_LIGHTSAIL_IP}"
+  "${SSH_USER}@${US_HOST}"
