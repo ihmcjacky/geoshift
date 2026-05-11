@@ -702,10 +702,12 @@ geoshift reload   # hot-reloads Mihomo
 |---|---|
 | Scripts | `/usr/local/lib/geoshift/` |
 | CLI | `/usr/local/bin/geoshift` |
-| Env file | `/etc/geoshift/geoshift.env` → symlink to repo's `geoshift.env` |
+| Env file | `/etc/geoshift/geoshift.env` (real file, per-machine — not synced from GitHub) |
 | Config + rules | `/etc/geoshift/config/` |
 | Mihomo config | `/etc/geoshift/config/config.yaml` |
 | Rule files | `/etc/geoshift/config/rules/` |
+
+> **Per-machine values** (IPs, SSH key paths) live only in `geoshift.env` and are never touched by `geoshift sync`. Only `config.yaml` and rule files are synced — they contain no machine-specific values.
 
 ### Windows
 

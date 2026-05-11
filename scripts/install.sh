@@ -31,7 +31,7 @@ rm -f "$tmp"
 echo "==> setcap (TUN without root)"
 sudo setcap cap_net_admin,cap_net_bind_service+ep "$MIHOMO_INSTALL"
 
-echo "==> GeoShift lib + env symlink"
+echo "==> GeoShift lib + env file"
 sudo install -d -m 0755 /usr/local/lib/geoshift
 sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh"     /usr/local/lib/geoshift/tunnel-us.sh
 sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-jp.sh"     /usr/local/lib/geoshift/tunnel-jp.sh
@@ -39,10 +39,26 @@ sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh"    /usr/local/lib/geoshi
 sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-sync.sh" /usr/local/lib/geoshift/geoshift-sync.sh
 sudo install -m 0755 "$REPO_ROOT/scripts/geoshift.sh"      /usr/local/bin/geoshift
 sudo install -d -m 0755 /etc/geoshift
-if [[ ! -e /etc/geoshift/geoshift.env ]]; then
-  sudo ln -sf "$REPO_ROOT/geoshift.env" /etc/geoshift/geoshift.env
-elif [[ "$(readlink -f /etc/geoshift/geoshift.env 2>/dev/null || true)" != "$(readlink -f "$REPO_ROOT/geoshift.env")" ]]; then
-  echo "Note: /etc/geoshift/geoshift.env already exists; not overwriting. Point it at $REPO_ROOT/geoshift.env if needed."
+
+# Migrate a legacy symlink to a real file so /etc/geoshift/ has no repo dependency
+if [[ -L /etc/geoshift/geoshift.env ]]; then
+  src="$(readlink -f /etc/geoshift/geoshift.env 2>/dev/null || true)"
+  if [[ -n "$src" && -f "$src" ]]; then
+    sudo cp "$src" /etc/geoshift/geoshift.env.tmp
+    sudo mv /etc/geoshift/geoshift.env.tmp /etc/geoshift/geoshift.env
+    echo "  Converted legacy symlink to real file at /etc/geoshift/geoshift.env"
+  else
+    sudo rm -f /etc/geoshift/geoshift.env
+    sudo cp "$REPO_ROOT/geoshift.env.example" /etc/geoshift/geoshift.env
+    sudo chmod 600 /etc/geoshift/geoshift.env
+    echo "  WARNING: broken symlink replaced with template - edit /etc/geoshift/geoshift.env with your IPs and key paths"
+  fi
+elif [[ ! -e /etc/geoshift/geoshift.env ]]; then
+  sudo cp "$REPO_ROOT/geoshift.env.example" /etc/geoshift/geoshift.env
+  sudo chmod 600 /etc/geoshift/geoshift.env
+  echo "  Created /etc/geoshift/geoshift.env from template - EDIT THIS FILE before starting services"
+else
+  echo "  /etc/geoshift/geoshift.env already exists, not overwriting"
 fi
 
 echo "==> Disable IPv6 (sysctl)"
@@ -62,16 +78,13 @@ for f in "$REPO_ROOT"/config/rules/*.yaml "$REPO_ROOT"/config/rules/*.txt; do
   [[ -f "$f" ]] && sudo install -m 0644 "$f" /etc/geoshift/config/rules/
 done
 
-# Update GEOSHIFT_CONFIG_DIR in geoshift.env to point at the deployed path
-GEOSHIFT_ENV_REAL="$(readlink -f /etc/geoshift/geoshift.env 2>/dev/null || echo "$REPO_ROOT/geoshift.env")"
-if [[ -f "$GEOSHIFT_ENV_REAL" ]]; then
-  if grep -q '^GEOSHIFT_CONFIG_DIR=' "$GEOSHIFT_ENV_REAL"; then
-    sed -i "s|^GEOSHIFT_CONFIG_DIR=.*|GEOSHIFT_CONFIG_DIR=/etc/geoshift/config|" "$GEOSHIFT_ENV_REAL"
-  else
-    echo "GEOSHIFT_CONFIG_DIR=/etc/geoshift/config" >> "$GEOSHIFT_ENV_REAL"
-  fi
-  echo "  GEOSHIFT_CONFIG_DIR set to /etc/geoshift/config in geoshift.env"
+# Ensure GEOSHIFT_CONFIG_DIR points at the deployed path (not the repo)
+if grep -q '^GEOSHIFT_CONFIG_DIR=' /etc/geoshift/geoshift.env 2>/dev/null; then
+  sudo sed -i "s|^GEOSHIFT_CONFIG_DIR=.*|GEOSHIFT_CONFIG_DIR=/etc/geoshift/config|" /etc/geoshift/geoshift.env
+else
+  echo "GEOSHIFT_CONFIG_DIR=/etc/geoshift/config" | sudo tee -a /etc/geoshift/geoshift.env > /dev/null
 fi
+echo "  GEOSHIFT_CONFIG_DIR set to /etc/geoshift/config"
 
 echo "==> Validate Mihomo config"
 if ! "$MIHOMO_INSTALL" -t -d /etc/geoshift/config >/dev/null; then
