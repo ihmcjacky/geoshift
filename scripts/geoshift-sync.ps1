@@ -4,7 +4,13 @@
 
 $ErrorActionPreference = 'Stop'
 
-$RepoRaw  = 'https://raw.githubusercontent.com/ihmcjacky/geoshift/master'
+$RepoRaw = 'https://raw.githubusercontent.com/ihmcjacky/geoshift/master'
+
+# config.yaml fetched to ConfigDir root (not rules/)
+$ConfigFiles = @(
+    'config/config.yaml'
+)
+
 $RuleFiles = @(
     'config/rules/jp-content.yaml',
     'config/rules/jp-content.txt',
@@ -48,8 +54,21 @@ if (-not (Test-Path $RulesDir)) {
     exit 1
 }
 
-Write-Host 'geoshift-sync: fetching rules from GitHub...'
+Write-Host 'geoshift-sync: fetching config and rules from GitHub...'
 $anyFailed = $false
+
+foreach ($cfgPath in $ConfigFiles) {
+    $filename = Split-Path $cfgPath -Leaf
+    $url  = "$RepoRaw/$cfgPath"
+    $dest = Join-Path $ConfigDir $filename
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -TimeoutSec 15
+        Write-Host "  updated: $filename"
+    } catch {
+        Write-Warning "  failed to fetch $filename (keeping cached version): $_"
+        $anyFailed = $true
+    }
+}
 
 foreach ($rulePath in $RuleFiles) {
     $filename = Split-Path $rulePath -Leaf
@@ -65,7 +84,7 @@ foreach ($rulePath in $RuleFiles) {
 }
 
 if (-not $anyFailed) {
-    Write-Host 'geoshift-sync: all rules up to date'
+    Write-Host 'geoshift-sync: all files up to date'
 } else {
     Write-Warning 'geoshift-sync: completed with warnings - some files may be stale'
 }

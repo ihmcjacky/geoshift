@@ -4,6 +4,12 @@
 set -euo pipefail
 
 REPO_RAW="https://raw.githubusercontent.com/ihmcjacky/geoshift/master"
+
+# config.yaml fetched to CONFIG_DIR root (not rules/)
+CONFIG_FILES=(
+  "config/config.yaml"
+)
+
 RULE_FILES=(
   "config/rules/jp-content.yaml"
   "config/rules/jp-content.txt"
@@ -29,8 +35,23 @@ if [[ ! -d "$RULES_DIR" ]]; then
   exit 1
 fi
 
-echo "geoshift-sync: fetching rules from GitHub..."
+echo "geoshift-sync: fetching config and rules from GitHub..."
 any_failed=0
+
+for cfg_path in "${CONFIG_FILES[@]}"; do
+  filename="$(basename "$cfg_path")"
+  url="$REPO_RAW/$cfg_path"
+  tmp="$(mktemp)"
+  if curl -sfL --max-time 15 "$url" -o "$tmp"; then
+    mv "$tmp" "$CONFIG_DIR/$filename"
+    echo "  updated: $filename"
+  else
+    rm -f "$tmp"
+    echo "  warning: failed to fetch $filename (keeping cached version)" >&2
+    any_failed=1
+  fi
+done
+
 for rule_path in "${RULE_FILES[@]}"; do
   filename="$(basename "$rule_path")"
   url="$REPO_RAW/$rule_path"
@@ -46,7 +67,7 @@ for rule_path in "${RULE_FILES[@]}"; do
 done
 
 if [[ $any_failed -eq 0 ]]; then
-  echo "geoshift-sync: all rules up to date"
+  echo "geoshift-sync: all files up to date"
 else
   echo "geoshift-sync: completed with warnings — some files may be stale" >&2
 fi

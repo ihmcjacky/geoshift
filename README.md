@@ -450,11 +450,11 @@ flowchart LR
 ```yaml
 # Proxy definitions (upstream SOCKS5 targets)
 proxies:
-  - name: US-Lightsail
+  - name: US-TUNNEL
     type: socks5
     server: 127.0.0.1
     port: 1080
-  - name: JP-Lightsail
+  - name: JP-TUNNEL
     type: socks5
     server: 127.0.0.1
     port: 1081
@@ -463,10 +463,10 @@ proxies:
 proxy-groups:
   - name: US-PROXY
     type: select
-    proxies: [US-Lightsail, DIRECT]
+    proxies: [US-TUNNEL, DIRECT]
   - name: JP-PROXY
     type: select
-    proxies: [JP-Lightsail, DIRECT]
+    proxies: [JP-TUNNEL, DIRECT]
 
 # Rules (evaluated top-to-bottom, first match wins)
 rules:
@@ -622,8 +622,8 @@ The `geoshift` CLI provides two commands for manual control:
 
 | Command | What it does |
 |---|---|
-| `geoshift sync` | Downloads latest `*.yaml` and `*.txt` rule files from GitHub into the local config/rules directory |
-| `geoshift reload` | Signals Mihomo to re-read all rule files from disk (via `PUT /configs?force=true` API). Falls back to `systemctl restart` if Mihomo API is unreachable. |
+| `geoshift sync` | Downloads latest `config.yaml` and `*.yaml`/`*.txt` rule files from GitHub into the deployed config directory |
+| `geoshift reload` | Signals Mihomo to re-read config and rules from disk (via `PUT /configs?force=true` API). Falls back to `systemctl restart` if Mihomo API is unreachable. |
 
 **Linux:**
 
@@ -678,13 +678,34 @@ curl -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # should show U
 
 ### Linux
 
+**For config.yaml or script changes** — re-run the installer:
+
 ```bash
 git pull
 bash scripts/install.sh
 sudo systemctl restart geoshift-tunnel-us.service geoshift-tunnel-jp.service geoshift-mihomo.service
 ```
 
-`install.sh` is idempotent — re-running it copies updated scripts to `/usr/local/lib/geoshift/` and installs the `geoshift` CLI to `/usr/local/bin/geoshift`. The `git pull` updates `config.yaml` and the rule files in-place (Mihomo reads them directly from the repo directory).
+`install.sh` is idempotent — it copies updated scripts to `/usr/local/lib/geoshift/`, installs the `geoshift` CLI, and deploys `config.yaml` and rules to `/etc/geoshift/config/`. Mihomo reads from that stable system path, not the repo.
+
+**For rule-only or config-only changes** (no script updates) — sync is enough, no reinstall needed:
+
+```bash
+git pull          # optional — sync fetches from GitHub directly
+geoshift sync     # pulls latest config.yaml and rule files into /etc/geoshift/config/
+geoshift reload   # hot-reloads Mihomo
+```
+
+### Linux file locations
+
+| Purpose | Path |
+|---|---|
+| Scripts | `/usr/local/lib/geoshift/` |
+| CLI | `/usr/local/bin/geoshift` |
+| Env file | `/etc/geoshift/geoshift.env` → symlink to repo's `geoshift.env` |
+| Config + rules | `/etc/geoshift/config/` |
+| Mihomo config | `/etc/geoshift/config/config.yaml` |
+| Rule files | `/etc/geoshift/config/rules/` |
 
 ### Windows
 
@@ -1223,4 +1244,4 @@ Disable-ScheduledTask -TaskName GeoShift-Tunnel-JP
 
 ---
 
-*Last updated: April 2026 (JP tunnel added: tunnel-jp.sh/ps1, geoshift-tunnel-jp.service, GeoShift-Tunnel-JP task; JP routing rules added for DMM/FANZA, NicoNico, Pixiv, TVer, Attackers, Ideapockets, Faleno; Shudder added to US rules; new §9 "Applying Rule Updates" runbook documents which services to restart for rule-only vs. infrastructure changes.)*
+*Last updated: May 2026 (proxy nodes renamed to vendor-neutral US-TUNNEL/JP-TUNNEL; JP tunnel migrated from AWS Lightsail to Oracle Cloud; Linux config deployment aligned with Windows — Mihomo now reads from /etc/geoshift/config/ instead of the repo working tree; geoshift sync now also fetches config.yaml on both platforms.)*

@@ -55,14 +55,33 @@ sudo install -m 0644 "$REPO_ROOT/systemd/geoshift-tunnel-jp.service" /etc/system
 sudo install -m 0644 "$REPO_ROOT/systemd/geoshift-mihomo.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 
+echo "==> Deploying config to /etc/geoshift/config"
+sudo install -d -m 0755 /etc/geoshift/config/rules
+sudo install -m 0644 "$REPO_ROOT/config/config.yaml" /etc/geoshift/config/config.yaml
+for f in "$REPO_ROOT"/config/rules/*.yaml "$REPO_ROOT"/config/rules/*.txt; do
+  [[ -f "$f" ]] && sudo install -m 0644 "$f" /etc/geoshift/config/rules/
+done
+
+# Update GEOSHIFT_CONFIG_DIR in geoshift.env to point at the deployed path
+GEOSHIFT_ENV_REAL="$(readlink -f /etc/geoshift/geoshift.env 2>/dev/null || echo "$REPO_ROOT/geoshift.env")"
+if [[ -f "$GEOSHIFT_ENV_REAL" ]]; then
+  if grep -q '^GEOSHIFT_CONFIG_DIR=' "$GEOSHIFT_ENV_REAL"; then
+    sed -i "s|^GEOSHIFT_CONFIG_DIR=.*|GEOSHIFT_CONFIG_DIR=/etc/geoshift/config|" "$GEOSHIFT_ENV_REAL"
+  else
+    echo "GEOSHIFT_CONFIG_DIR=/etc/geoshift/config" >> "$GEOSHIFT_ENV_REAL"
+  fi
+  echo "  GEOSHIFT_CONFIG_DIR set to /etc/geoshift/config in geoshift.env"
+fi
+
 echo "==> Validate Mihomo config"
-if ! "$MIHOMO_INSTALL" -t -d "$REPO_ROOT/config" >/dev/null; then
-  "$MIHOMO_INSTALL" -t -d "$REPO_ROOT/config" || true
+if ! "$MIHOMO_INSTALL" -t -d /etc/geoshift/config >/dev/null; then
+  "$MIHOMO_INSTALL" -t -d /etc/geoshift/config || true
   die "mihomo -t failed"
 fi
 
 echo
-echo "Done. Ensure $REPO_ROOT/geoshift.env contains GEOSHIFT_CONFIG_DIR=$REPO_ROOT/config"
+echo "Done."
+echo "Config deployed to /etc/geoshift/config/ (Mihomo reads from there, not the repo)."
 echo "SSH key must be chmod 600."
 echo
 echo "Start stack:"
@@ -71,8 +90,8 @@ echo "Stop TUN (back to normal routing):"
 echo "  sudo systemctl stop geoshift-mihomo.service"
 echo "  (optional) sudo systemctl stop geoshift-tunnel-us.service geoshift-tunnel-jp.service"
 echo
-echo "Rule sync commands (no tunnel restart needed):"
-echo "  geoshift sync    # fetch latest rules from GitHub"
+echo "Sync and reload commands (no tunnel restart needed):"
+echo "  geoshift sync    # fetch latest config.yaml and rules from GitHub"
 echo "  geoshift reload  # reload Mihomo config"
 echo
 echo "Upgrading an existing install: git pull && bash scripts/install.sh"

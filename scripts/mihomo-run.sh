@@ -9,7 +9,7 @@ if [[ -r "$ENV_FILE" ]]; then
   set +a
 fi
 
-CONFIG_DIR="${GEOSHIFT_CONFIG_DIR:-/home/jackylam/Documents/gitproj/geoshift/config}"
+CONFIG_DIR="${GEOSHIFT_CONFIG_DIR:-/etc/geoshift/config}"
 if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
   echo "geoshift: no config at $CONFIG_DIR/config.yaml" >&2
   exit 1
