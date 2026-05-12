@@ -72,40 +72,60 @@ info "Creating directories"
 }
 
 # -- Step 2: Download Mihomo --------------------------------------------------
-info "Downloading latest Mihomo (windows-amd64)"
-$releaseApi = 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest'
-$release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing
-$asset = $release.assets | Where-Object {
-    $_.name -match '^mihomo-windows-amd64-v[\d.]+\.zip$'
-} | Select-Object -First 1
+$skipMihomo = $false
+if (Test-Path $MihomoExe) {
+    $answer = Read-Host "mihomo.exe already exists. Re-download? [y/N]"
+    if ($answer -notmatch '^[Yy]') {
+        info "Skipping Mihomo download (keeping existing)"
+        $skipMihomo = $true
+    }
+}
+if (-not $skipMihomo) {
+    info "Downloading latest Mihomo (windows-amd64)"
+    $releaseApi = 'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest'
+    $release = Invoke-RestMethod -Uri $releaseApi -UseBasicParsing
+    $asset = $release.assets | Where-Object {
+        $_.name -match '^mihomo-windows-amd64-v[\d.]+\.zip$'
+    } | Select-Object -First 1
 
-if (-not $asset) { die "Could not find Mihomo windows-amd64 asset in latest release" }
+    if (-not $asset) { die "Could not find Mihomo windows-amd64 asset in latest release" }
 
-$tmpZip = Join-Path $env:TEMP 'mihomo-windows.zip'
-$tmpDir = Join-Path $env:TEMP 'mihomo-extract'
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing
-if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
-Expand-Archive -Path $tmpZip -DestinationPath $tmpDir
-$exeSrc = Get-ChildItem $tmpDir -Filter 'mihomo*.exe' -Recurse | Select-Object -First 1
-if (-not $exeSrc) { die "mihomo.exe not found in downloaded zip" }
-Copy-Item $exeSrc.FullName -Destination $MihomoExe -Force
-Remove-Item $tmpZip, $tmpDir -Recurse -Force
+    $tmpZip = Join-Path $env:TEMP 'mihomo-windows.zip'
+    $tmpDir = Join-Path $env:TEMP 'mihomo-extract'
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tmpZip -UseBasicParsing
+    if (Test-Path $tmpDir) { Remove-Item $tmpDir -Recurse -Force }
+    Expand-Archive -Path $tmpZip -DestinationPath $tmpDir
+    $exeSrc = Get-ChildItem $tmpDir -Filter 'mihomo*.exe' -Recurse | Select-Object -First 1
+    if (-not $exeSrc) { die "mihomo.exe not found in downloaded zip" }
+    Copy-Item $exeSrc.FullName -Destination $MihomoExe -Force
+    Remove-Item $tmpZip, $tmpDir -Recurse -Force
+}
 
 # -- Step 3: Download WinTun DLL ----------------------------------------------
-info "Downloading WinTun"
-$wintunUrl = 'https://www.wintun.net/builds/wintun-0.14.1.zip'
-$wintunZip = Join-Path $env:TEMP 'wintun.zip'
-$wintunDir = Join-Path $env:TEMP 'wintun-extract'
-Invoke-WebRequest -Uri $wintunUrl -OutFile $wintunZip -UseBasicParsing
-if (Test-Path $wintunDir) { Remove-Item $wintunDir -Recurse -Force }
-Expand-Archive -Path $wintunZip -DestinationPath $wintunDir
-# WinTun zip has amd64/wintun.dll
-$dllSrc = Get-ChildItem $wintunDir -Filter 'wintun.dll' -Recurse |
-    Where-Object { $_.DirectoryName -match 'amd64' } |
-    Select-Object -First 1
-if (-not $dllSrc) { die "wintun.dll (amd64) not found in downloaded zip" }
-Copy-Item $dllSrc.FullName -Destination $WinTunDll -Force
-Remove-Item $wintunZip, $wintunDir -Recurse -Force
+$skipWintun = $false
+if (Test-Path $WinTunDll) {
+    $answer = Read-Host "wintun.dll already exists. Re-download? [y/N]"
+    if ($answer -notmatch '^[Yy]') {
+        info "Skipping WinTun download (keeping existing)"
+        $skipWintun = $true
+    }
+}
+if (-not $skipWintun) {
+    info "Downloading WinTun"
+    $wintunUrl = 'https://www.wintun.net/builds/wintun-0.14.1.zip'
+    $wintunZip = Join-Path $env:TEMP 'wintun.zip'
+    $wintunDir = Join-Path $env:TEMP 'wintun-extract'
+    Invoke-WebRequest -Uri $wintunUrl -OutFile $wintunZip -UseBasicParsing
+    if (Test-Path $wintunDir) { Remove-Item $wintunDir -Recurse -Force }
+    Expand-Archive -Path $wintunZip -DestinationPath $wintunDir
+    # WinTun zip has amd64/wintun.dll
+    $dllSrc = Get-ChildItem $wintunDir -Filter 'wintun.dll' -Recurse |
+        Where-Object { $_.DirectoryName -match 'amd64' } |
+        Select-Object -First 1
+    if (-not $dllSrc) { die "wintun.dll (amd64) not found in downloaded zip" }
+    Copy-Item $dllSrc.FullName -Destination $WinTunDll -Force
+    Remove-Item $wintunZip, $wintunDir -Recurse -Force
+}
 
 # -- Step 4: Copy scripts -----------------------------------------------------
 info "Copying PowerShell scripts"
