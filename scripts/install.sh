@@ -77,6 +77,7 @@ sudo install -m 0644 "$REPO_ROOT/config/config.yaml" /etc/geoshift/config/config
 for f in "$REPO_ROOT"/config/rules/*.yaml "$REPO_ROOT"/config/rules/*.txt; do
   [[ -f "$f" ]] && sudo install -m 0644 "$f" /etc/geoshift/config/rules/
 done
+sudo chown -R "$(whoami):$(whoami)" /etc/geoshift/config
 
 # Ensure GEOSHIFT_CONFIG_DIR points at the deployed path (not the repo)
 if grep -q '^GEOSHIFT_CONFIG_DIR=' /etc/geoshift/geoshift.env 2>/dev/null; then
