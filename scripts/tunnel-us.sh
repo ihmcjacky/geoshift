@@ -23,6 +23,8 @@ set +a
 exec /usr/bin/autossh -M 0 -N -D 1080 \
   -i "$US_SSH_KEY" \
   -o StrictHostKeyChecking=accept-new \
-  -o ServerAliveInterval=30 \
-  -o ServerAliveCountMax=3 \
+  -o AddressFamily=inet \
+  -o TCPKeepAlive=yes \
+  -o ServerAliveInterval=10 \
+  -o ServerAliveCountMax=6 \
   "${SSH_USER}@${US_HOST}"
