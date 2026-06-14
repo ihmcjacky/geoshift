@@ -59,9 +59,10 @@ switch ($cmd) {
     }
     'status' {
         foreach ($name in $Tasks) {
-            $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-            if ($task) {
-                $state = $task.State
+            $raw = & schtasks.exe /query /tn $name /fo LIST 2>$null
+            if ($LASTEXITCODE -eq 0 -and $raw) {
+                $stateLine = $raw | Where-Object { $_ -match '^Status:' } | Select-Object -First 1
+                $state = if ($stateLine) { ($stateLine -replace '^Status:\s*', '').Trim() } else { 'Unknown' }
                 $color = if ($state -eq 'Running') { 'Green' } else { 'Yellow' }
                 Write-Host ("  {0,-25} {1}" -f $name, $state) -ForegroundColor $color
             } else {
