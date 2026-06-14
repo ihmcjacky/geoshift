@@ -12,6 +12,8 @@ $ConfigFiles = @(
 )
 
 $RuleFiles = @(
+    'config/rules/jp-strict.yaml',
+    'config/rules/jp-strict.txt',
     'config/rules/jp-content.yaml',
     'config/rules/jp-content.txt',
     'config/rules/us-ai.yaml',

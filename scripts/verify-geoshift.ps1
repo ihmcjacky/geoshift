@@ -106,11 +106,40 @@ foreach ($log in @('tunnel-us.log', 'mihomo.log', 'mihomo-core.log')) {
 Write-Host ''
 Write-Host '=== Step 6 / 8: Quick network hints ===' -ForegroundColor Cyan
 $listen9090 = Get-NetTCPConnection -LocalPort 9090 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-Write-Host ("  Port 9090 listen: {0}" -f ([bool]$listen9090))
+Write-Host ("  Port 9090 listen (Mihomo API): {0}" -f ([bool]$listen9090))
 $listen1080 = Get-NetTCPConnection -LocalPort 1080 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-Write-Host ("  Port 1080 listen (SOCKS): {0}" -f ([bool]$listen1080))
+Write-Host ("  Port 1080 listen (US SOCKS5):  {0}" -f ([bool]$listen1080))
+$listen1081 = Get-NetTCPConnection -LocalPort 1081 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+Write-Host ("  Port 1081 listen (JP SOCKS5):  {0}" -f ([bool]$listen1081))
+if (-not $listen1081) {
+    Write-Host '  WARNING: JP tunnel not listening on 1081 - Abema geo check will fail!' -ForegroundColor Red
+}
 
 Write-Host ''
-Write-Host '=== Step 9-10 ===' -ForegroundColor Cyan
-Write-Host '  Manual: browser SOCKS5 127.0.0.1:1080 + https://ifconfig.me'
-Write-Host '  Manual: reboot test per ARCHITECTURE.md Step 10'
+Write-Host '=== Step 9: Tunnel exit-IP check ===' -ForegroundColor Cyan
+Write-Host '  Checking IP seen through JP tunnel (socks5h://127.0.0.1:1081)...'
+if ($listen1081) {
+    $curlExe = (Get-Command curl.exe -ErrorAction SilentlyContinue)?.Source
+    if ($curlExe) {
+        try {
+            $jpIp = (& $curlExe -s --max-time 10 -x socks5h://127.0.0.1:1081 https://ifconfig.me/ip 2>&1).Trim()
+            if ($jpIp -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$') {
+                Write-Host ("  JP tunnel exit IP: {0}" -f $jpIp) -ForegroundColor Green
+                Write-Host '  Check if this is Japanese: https://ipinfo.io'
+            } else {
+                Write-Host ("  JP tunnel curl returned unexpected output: {0}" -f $jpIp) -ForegroundColor Red
+            }
+        } catch {
+            Write-Host ("  JP tunnel curl failed: {0}" -f $_) -ForegroundColor Red
+        }
+    } else {
+        Write-Host '  curl.exe not found - run manually (see below).' -ForegroundColor Yellow
+    }
+} else {
+    Write-Host '  Skipped (port 1081 not listening).' -ForegroundColor Yellow
+}
+
+Write-Host ''
+Write-Host '  To test JP tunnel manually (run in a new prompt):'
+Write-Host '    curl -x socks5h://127.0.0.1:1081 https://ifconfig.me'
+Write-Host '  Expected: a Japanese IP address (103.x.x.x, 126.x.x.x, 153.x.x.x, etc.)'
