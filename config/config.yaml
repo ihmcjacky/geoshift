@@ -76,6 +76,12 @@ rule-providers:
     path: ./rules/jp-content.yaml
 
 rules:
+  # ssh.exe runs the SOCKS5 tunnel processes themselves. With auto-route: true,
+  # all traffic including ssh.exe's own connections to the exit nodes goes through
+  # TUN. Mihomo routes them as MATCH,DIRECT but the return packets re-enter TUN,
+  # creating a routing loop (banner exchange: Connection to UNKNOWN port -1).
+  # This rule bypasses TUN/proxy entirely for ssh.exe so reconnections work.
+  - PROCESS-NAME,ssh.exe,DIRECT
   - RULE-SET,us-ai,US-PROXY
   - RULE-SET,jp-content,JP-PROXY
   - MATCH,DIRECT

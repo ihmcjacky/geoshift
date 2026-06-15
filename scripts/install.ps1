@@ -222,6 +222,15 @@ if (Test-Path $repoConfig) {
 # -- Step 7: Register Task Scheduler tasks ------------------------------------
 info "Registering Task Scheduler tasks"
 
+# Capture which tasks existed before re-registering so we can auto-restart
+# on an update. Fresh installs have no tasks yet, so $isUpdate stays false.
+$tasksBefore = @{}
+foreach ($tn in @('GeoShift-Tunnel-US', 'GeoShift-Tunnel-JP', 'GeoShift-Mihomo')) {
+    $t = Get-ScheduledTask -TaskName $tn -ErrorAction SilentlyContinue
+    $tasksBefore[$tn] = if ($t) { $t.State } else { $null }
+}
+$isUpdate = ($tasksBefore.Values | Where-Object { $_ -ne $null }).Count -gt 0
+
 $psExe = 'powershell.exe'
 $psFlags = '-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File'
 
@@ -289,27 +298,37 @@ if (Test-Path "$ConfigDir\config.yaml") {
 Write-Host ""
 Write-Host "Installation complete." -ForegroundColor Green
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  1. Edit $EnvFile with your Lightsail IP and SSH key path"
-Write-Host "  2. Re-run install.ps1 (as Administrator) so it sets the SSH key owner"
-Write-Host "     to SYSTEM and locks the ACL. Or run manually:"
-Write-Host "     `$acl = Get-Acl '<key.pem>'"
-Write-Host "     `$acl.SetOwner([System.Security.Principal.NTAccount]'NT AUTHORITY\SYSTEM')"
-Write-Host "     Set-Acl '<key.pem>' `$acl"
-Write-Host "     icacls '<key.pem>' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(R)'"
-Write-Host "     NOTE: icacls /grant alone is not enough - the file OWNER must also be SYSTEM."
-Write-Host "  3. Reboot, or start tasks manually:"
-Write-Host "     Start-ScheduledTask -TaskName GeoShift-Tunnel-US"
-Write-Host "     Start-ScheduledTask -TaskName GeoShift-Tunnel-JP"
-Write-Host "     Start-ScheduledTask -TaskName GeoShift-Mihomo"
-Write-Host ""
-Write-Host "Logs: $LogDir"
-Write-Host "Stop:   Stop-ScheduledTask -TaskName GeoShift-Mihomo"
-Write-Host "        Stop-ScheduledTask -TaskName GeoShift-Tunnel-US"
-Write-Host "        Stop-ScheduledTask -TaskName GeoShift-Tunnel-JP"
-Write-Host ""
-Write-Host "Rule sync (open a new prompt after install for PATH to take effect):"
-Write-Host "  geoshift sync    # fetch latest rules from GitHub"
-Write-Host "  geoshift reload  # reload Mihomo config"
+
+if ($isUpdate) {
+    # Register-ScheduledTask -Force killed any running instances during step 7.
+    # Auto-restart so an upgrade does not require a manual step or reboot.
+    info "Update detected - restarting GeoShift tasks"
+    Start-ScheduledTask -TaskName 'GeoShift-Tunnel-US'
+    Start-ScheduledTask -TaskName 'GeoShift-Tunnel-JP'
+    Write-Host "  Waiting 5 s for tunnels to come up..."
+    Start-Sleep -Seconds 5
+    Start-ScheduledTask -TaskName 'GeoShift-Mihomo'
+    Write-Host "  All tasks restarted." -ForegroundColor Green
+    Write-Host "  Run 'geoshift status' to verify, or check logs in $LogDir"
+} else {
+    Write-Host "Next steps:"
+    Write-Host "  1. Edit $EnvFile with your server IP and SSH key path"
+    Write-Host "  2. Re-run install.ps1 (as Administrator) so it sets the SSH key owner"
+    Write-Host "     to SYSTEM and locks the ACL. Or run manually:"
+    Write-Host "     `$acl = Get-Acl '<key.pem>'"
+    Write-Host "     `$acl.SetOwner([System.Security.Principal.NTAccount]'NT AUTHORITY\SYSTEM')"
+    Write-Host "     Set-Acl '<key.pem>' `$acl"
+    Write-Host "     icacls '<key.pem>' /inheritance:r /grant:r 'NT AUTHORITY\SYSTEM:(R)'"
+    Write-Host "     NOTE: icacls /grant alone is not enough - the file OWNER must also be SYSTEM."
+    Write-Host "  3. Reboot, or start tasks manually:"
+    Write-Host "     geoshift start"
+    Write-Host ""
+    Write-Host "Logs: $LogDir"
+    Write-Host "Stop: geoshift stop"
+    Write-Host ""
+    Write-Host "Rule sync (open a new prompt after install for PATH to take effect):"
+    Write-Host "  geoshift sync    # fetch latest rules from GitHub"
+    Write-Host "  geoshift reload  # reload Mihomo config"
+}
 Write-Host ""
 Write-Host "Upgrading an existing install: git pull, then re-run install.ps1 as Administrator"
