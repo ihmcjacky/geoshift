@@ -49,6 +49,16 @@ proxies:
     server: 127.0.0.1
     port: 1081
     udp: true  # SSH tunnels only carry TCP; QUIC attempts will fail with EOF and browser falls back to HTTP/2 TCP
+  # NordVPN SOCKS5 - use for sites that block cloud/datacenter IPs (e.g. Abema).
+  # Credentials: nordvpn.com -> My Account -> Manual Setup -> Service credentials.
+  # Server list: nordvpn.com/servers -> filter Japan -> copy hostname from "SOCKS5" column.
+  - name: NordVPN-JP
+    type: socks5
+    server: jp743.nordvpn.com
+    port: 1080
+    username: "aqKGDbkRckaeQyBQSQTHAEwe"
+    password: "ccBfDPkeY9CNXnr1LxUzj8H6"
+    udp: true
 
 proxy-groups:
   - name: US-PROXY
@@ -60,16 +70,34 @@ proxy-groups:
     type: select
     proxies:
       - JP-TUNNEL
+      - NordVPN-JP
+      - DIRECT
+  # JP-STRICT: for sites that block cloud/datacenter IPs (e.g. Abema).
+  # Default is NordVPN-JP; fall back to JP-TUNNEL via dashboard if NordVPN is down.
+  - name: JP-STRICT
+    type: select
+    proxies:
+      - NordVPN-JP
+      - JP-TUNNEL
       - DIRECT
 
 # Rule sets loaded from files in config/rules/.
 # To add domains: edit the appropriate *.yaml file, commit, then run:
 #   geoshift sync && geoshift reload   (on each device — no tunnel restart needed)
+#
+# Rule file guide:
+#   jp-strict.yaml  -> JP-STRICT (NordVPN-JP) : sites that block datacenter IPs
+#   jp-content.yaml -> JP-PROXY  (JP-TUNNEL)  : general JP content
+#   us-ai.yaml      -> US-PROXY  (US-TUNNEL)  : US AI services
 rule-providers:
   us-ai:
     type: file
     behavior: classical
     path: ./rules/us-ai.yaml
+  jp-strict:
+    type: file
+    behavior: classical
+    path: ./rules/jp-strict.yaml
   jp-content:
     type: file
     behavior: classical
@@ -83,6 +111,7 @@ rules:
   # This rule bypasses TUN/proxy entirely for ssh.exe so reconnections work.
   - PROCESS-NAME,ssh.exe,DIRECT
   - RULE-SET,us-ai,US-PROXY
+  - RULE-SET,jp-strict,JP-STRICT
   - RULE-SET,jp-content,JP-PROXY
   - MATCH,DIRECT
 
