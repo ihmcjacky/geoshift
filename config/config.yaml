@@ -49,16 +49,19 @@ proxies:
     server: 127.0.0.1
     port: 1081
     udp: true  # SSH tunnels only carry TCP; QUIC attempts will fail with EOF and browser falls back to HTTP/2 TCP
-  # NordVPN SOCKS5 - use for sites that block cloud/datacenter IPs (e.g. Abema).
-  # Credentials: nordvpn.com -> My Account -> Manual Setup -> Service credentials.
-  # Server list: nordvpn.com/servers -> filter Japan -> copy hostname from "SOCKS5" column.
+  # NordVPN HTTPS proxy (port 89) - use for sites that block cloud/datacenter IPs (e.g. Abema).
+  # NordVPN has no Japan SOCKS5 servers (only NL/SE/US/IE). Japan exits use *.proxy.nordvpn.com.
+  # Pick a JP server: api.nordvpn.com/v1/servers/recommendations?filters[country_id]=108
+  #   &filters[servers_technologies][identifier]=proxy_ssl&limit=1 -> technologies metadata proxy_hostname.
+  # Credentials: nordaccount.com -> NordVPN -> Manual Setup -> Service credentials (not login password).
   - name: NordVPN-JP
-    type: socks5
-    server: jp743.nordvpn.com
-    port: 1080
-    username: "aqKGDbkRckaeQyBQSQTHAEwe"
-    password: "ccBfDPkeY9CNXnr1LxUzj8H6"
-    udp: true
+    type: http
+    server: jp874.proxy.nordvpn.com
+    port: 89
+    tls: true
+    username: "YOUR_NORDVPN_SERVICE_USERNAME"
+    password: "YOUR_NORDVPN_SERVICE_PASSWORD"
+    udp: false
 
 proxy-groups:
   - name: US-PROXY
@@ -131,6 +134,16 @@ dns:
   listen: 0.0.0.0:1053
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+  # Upstream proxy hostnames must resolve to real IPs, not fake-ip (198.18.x.x).
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
+  fake-ip-filter:
+    - '+.nordvpn.com'
+    - '+.nordhold.net'
   nameserver:
     - https://1.1.1.1/dns-query
     - https://8.8.8.8/dns-query

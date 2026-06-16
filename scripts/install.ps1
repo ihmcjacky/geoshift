@@ -219,6 +219,35 @@ if (Test-Path $repoConfig) {
     Write-Host "  WARNING: no config found - copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
 }
 
+# -- Step 6b: Inject NordVPN service credentials from geoshift.env ------------
+# Repo config.yaml keeps placeholders; real values live only in geoshift.env (gitignored).
+$nordUser = $null
+$nordPass = $null
+if (Test-Path $EnvFile) {
+    foreach ($line in Get-Content $EnvFile) {
+        $line = $line.Trim()
+        if ($line -match '^\s*#' -or $line -eq '') { continue }
+        if ($line -match '^NORDVPN_SERVICE_USERNAME\s*=\s*(.+)$') {
+            $candidate = $Matches[1].Trim().Trim('"')
+            if ($candidate -notmatch 'your-|YOUR_NORDVPN') { $nordUser = $candidate }
+        }
+        if ($line -match '^NORDVPN_SERVICE_PASSWORD\s*=\s*(.+)$') {
+            $candidate = $Matches[1].Trim().Trim('"')
+            if ($candidate -notmatch 'your-|YOUR_NORDVPN') { $nordPass = $candidate }
+        }
+    }
+}
+$cfgPath = Join-Path $ConfigDir 'config.yaml'
+if ($nordUser -and $nordPass -and (Test-Path $cfgPath)) {
+    $cfg = Get-Content $cfgPath -Raw
+    $cfg = $cfg.Replace('YOUR_NORDVPN_SERVICE_USERNAME', $nordUser)
+    $cfg = $cfg.Replace('YOUR_NORDVPN_SERVICE_PASSWORD', $nordPass)
+    [System.IO.File]::WriteAllText($cfgPath, $cfg)
+    Write-Host "  Injected NordVPN service credentials from geoshift.env"
+} elseif (Test-Path $cfgPath) {
+    Write-Host "  NordVPN placeholders left in config.yaml - set NORDVPN_SERVICE_* in geoshift.env and re-run install.ps1" -ForegroundColor Yellow
+}
+
 # -- Step 7: Register Task Scheduler tasks ------------------------------------
 info "Registering Task Scheduler tasks"
 

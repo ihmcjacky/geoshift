@@ -79,6 +79,46 @@ for f in "$REPO_ROOT"/config/rules/*.yaml "$REPO_ROOT"/config/rules/*.txt; do
 done
 sudo chown -R "$(whoami):$(whoami)" /etc/geoshift/config
 
+# Inject NordVPN service credentials from geoshift.env (repo config keeps placeholders).
+echo "==> NordVPN credentials"
+ENV_FILE="/etc/geoshift/geoshift.env"
+CFG="/etc/geoshift/config/config.yaml"
+nord_user=""
+nord_pass=""
+if [[ -f "$ENV_FILE" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" =~ ^NORDVPN_SERVICE_USERNAME[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+      candidate="${BASH_REMATCH[1]}"
+      candidate="${candidate%\"}"; candidate="${candidate#\"}"
+      [[ ! "$candidate" =~ your-|YOUR_NORDVPN ]] && nord_user="$candidate"
+    fi
+    if [[ "$line" =~ ^NORDVPN_SERVICE_PASSWORD[[:space:]]*=[[:space:]]*(.+)$ ]]; then
+      candidate="${BASH_REMATCH[1]}"
+      candidate="${candidate%\"}"; candidate="${candidate#\"}"
+      [[ ! "$candidate" =~ your-|YOUR_NORDVPN ]] && nord_pass="$candidate"
+    fi
+  done < "$ENV_FILE"
+fi
+if [[ -n "$nord_user" && -n "$nord_pass" && -f "$CFG" ]]; then
+  tmp="$(mktemp)"
+  python3 - "$CFG" "$tmp" "$nord_user" "$nord_pass" <<'PY'
+import sys
+src, dst, user, password = sys.argv[1:5]
+text = open(src, encoding="utf-8").read()
+text = text.replace("YOUR_NORDVPN_SERVICE_USERNAME", user)
+text = text.replace("YOUR_NORDVPN_SERVICE_PASSWORD", password)
+open(dst, "w", encoding="utf-8", newline="\n").write(text)
+PY
+  sudo mv "$tmp" "$CFG"
+  sudo chown "$(whoami):$(whoami)" "$CFG"
+  echo "  Injected NordVPN service credentials from geoshift.env"
+elif [[ -f "$CFG" ]]; then
+  echo "  WARNING: NordVPN placeholders left in config.yaml - set NORDVPN_SERVICE_* in geoshift.env and re-run install.sh"
+fi
+
 # Ensure GEOSHIFT_CONFIG_DIR points at the deployed path (not the repo)
 if grep -q '^GEOSHIFT_CONFIG_DIR=' /etc/geoshift/geoshift.env 2>/dev/null; then
   sudo sed -i "s|^GEOSHIFT_CONFIG_DIR=.*|GEOSHIFT_CONFIG_DIR=/etc/geoshift/config|" /etc/geoshift/geoshift.env
