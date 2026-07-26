@@ -30,6 +30,11 @@ DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com
 DOMAIN-SUFFIX,deepmind.com
 DOMAIN-SUFFIX,deepmind.google
 DOMAIN-SUFFIX,shudder.com
+DOMAIN-SUFFIX,imggaming.com
+DOMAIN-SUFFIX,diceplatform.com
+DOMAIN-SUFFIX,onvesper.com
+DOMAIN-SUFFIX,onetrust.com
+DOMAIN-SUFFIX,cookielaw.org
 DOMAIN-SUFFIX,aiv-cdn.net
 DOMAIN-SUFFIX,aiv-delivery.net
 DOMAIN-SUFFIX,amazonprimevideo.cn
