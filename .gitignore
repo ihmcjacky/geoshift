@@ -1,6 +1,9 @@
 # Local secrets (IPs, SSH key path, optional overrides) — never commit
 geoshift.env
 
+# User-managed custom rule overlays — never commit, created by installer/wizard
+config/rules/*-custom.yaml
+
 # GeoIP databases downloaded by Mihomo into the config directory on first run
 config/*.mmdb
 config/Country.mmdb

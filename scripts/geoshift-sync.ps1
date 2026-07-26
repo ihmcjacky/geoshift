@@ -90,3 +90,29 @@ if (-not $anyFailed) {
 } else {
     Write-Warning 'geoshift-sync: completed with warnings - some files may be stale'
 }
+
+# Re-apply local NordVPN settings from geoshift.env.
+# geoshift sync overwrites config.yaml with the credential-free repo copy;
+# this restores credentials and JP-STRICT order so they are never lost after a sync.
+$wizardScript = Join-Path (Split-Path $EnvFile) '..\..\..\Program Files\GeoShift\geoshift-config.ps1' -Resolve -ErrorAction SilentlyContinue
+if (-not $wizardScript -or -not (Test-Path $wizardScript)) {
+    $wizardScript = 'C:\Program Files\GeoShift\geoshift-config.ps1'
+}
+if (Test-Path $wizardScript) {
+    $Global:GeoShiftLoadFunctionsOnly = $true
+    . $wizardScript
+    $Global:GeoShiftLoadFunctionsOnly = $false
+    $cfgPath = Join-Path $ConfigDir 'config.yaml'
+    if (Test-Path $cfgPath) {
+        Write-Host 'geoshift-sync: re-applying NordVPN settings from geoshift.env...'
+        Invoke-NordVpnApply -ConfigYaml $cfgPath
+        $result = & 'C:\Program Files\GeoShift\mihomo.exe' -t -d $ConfigDir 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host 'geoshift-sync: config validated OK'
+        } else {
+            Write-Warning "geoshift-sync: mihomo -t failed after sync:`n$result"
+        }
+    }
+} else {
+    Write-Warning 'geoshift-sync: geoshift-config.ps1 not found, skipping NordVPN re-apply'
+}

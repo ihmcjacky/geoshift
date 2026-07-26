@@ -13,6 +13,7 @@ function usage {
     Write-Host 'Usage: geoshift <command>'
     Write-Host ''
     Write-Host 'Commands (no elevated privileges required unless noted):'
+    Write-Host '  config   Run the configuration wizard (geoshift.env, NordVPN, custom rules)'
     Write-Host '  sync     Fetch latest config and rules from GitHub, write to config dir'
     Write-Host '  reload   Reload Mihomo config via REST API (no restart needed)'
     Write-Host '  status   Show running/stopped state of all GeoShift scheduled tasks'
@@ -37,6 +38,15 @@ $cmd = if ($args.Count -gt 0) { $args[0] } else { '' }
 if (-not $cmd) { usage }
 
 switch ($cmd) {
+    'config' {
+        $cfgScript = Join-Path $InstallDir 'geoshift-config.ps1'
+        if (-not (Test-Path $cfgScript)) {
+            Write-Host "geoshift: config wizard not found at $cfgScript" -ForegroundColor Red
+            exit 1
+        }
+        # Launch interactive PowerShell so Read-Host works (geoshift.bat uses -NonInteractive)
+        & powershell.exe -ExecutionPolicy Bypass -File $cfgScript
+    }
     'sync' {
         $syncScript = Join-Path $InstallDir 'geoshift-sync.ps1'
         if (-not (Test-Path $syncScript)) {

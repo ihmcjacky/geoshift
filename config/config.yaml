@@ -1,4 +1,4 @@
-# GeoShift — Mihomo proxy config. Upstreams: SOCKS5 127.0.0.1:1080 (US tunnel), 127.0.0.1:1081 (JP tunnel).
+# GeoShift - Mihomo proxy config. Upstreams: SOCKS5 127.0.0.1:1080 (US tunnel), 127.0.0.1:1081 (JP tunnel).
 # Dashboard / API: external-controller binds 127.0.0.1:9090 only (not reachable from LAN/internet).
 
 mode: rule
@@ -6,7 +6,7 @@ log-level: info
 ipv6: false
 
 # systemd-resolved often uses router DNS (bypassing Mihomo fake-IP), so apps see real IPs and
-# DOMAIN rules would never match → everything fell through to MATCH,DIRECT. Sniff TLS SNI / HTTP
+# DOMAIN rules would never match -> everything fell through to MATCH,DIRECT. Sniff TLS SNI / HTTP
 # Host so claude.ai / platform.claude.com still hit US-PROXY even when connecting by IP.
 sniffer:
   enable: true
@@ -18,7 +18,7 @@ sniffer:
       ports: [443, 8443]
     HTTP:
       ports: [80, 8080-8880]
-    # HTTP/3 (QUIC) uses UDP/443; without this, browsers hit CDN IPs as DIRECT → HK IP → geo block.
+    # HTTP/3 (QUIC) uses UDP/443; without this, browsers hit CDN IPs as DIRECT -> HK IP -> geo block.
     QUIC:
       ports: [443]
 
@@ -30,7 +30,7 @@ external-controller-cors:
   allow-origins:
     - "*"
   allow-private-network: true
-# First run: download panel into external-ui — PowerShell:
+# First run: download panel into external-ui - PowerShell:
 #   Invoke-RestMethod -Method Post -Uri http://127.0.0.1:9090/upgrade/ui
 # Or use hosted UI: https://yacd.metacubex.one/?hostname=127.0.0.1&port=9090
 
@@ -86,7 +86,7 @@ proxy-groups:
 
 # Rule sets loaded from files in config/rules/.
 # To add domains: edit the appropriate *.yaml file, commit, then run:
-#   geoshift sync && geoshift reload   (on each device — no tunnel restart needed)
+#   geoshift sync && geoshift reload   (on each device - no tunnel restart needed)
 #
 # Rule file guide:
 #   jp-strict.yaml  -> JP-STRICT (NordVPN-JP) : sites that block datacenter IPs
@@ -97,14 +97,26 @@ rule-providers:
     type: file
     behavior: classical
     path: ./rules/us-ai.yaml
+  us-ai-custom:
+    type: file
+    behavior: classical
+    path: ./rules/us-ai-custom.yaml
   jp-strict:
     type: file
     behavior: classical
     path: ./rules/jp-strict.yaml
+  jp-strict-custom:
+    type: file
+    behavior: classical
+    path: ./rules/jp-strict-custom.yaml
   jp-content:
     type: file
     behavior: classical
     path: ./rules/jp-content.yaml
+  jp-content-custom:
+    type: file
+    behavior: classical
+    path: ./rules/jp-content-custom.yaml
 
 rules:
   # ssh.exe runs the SOCKS5 tunnel processes themselves. With auto-route: true,
@@ -113,8 +125,11 @@ rules:
   # creating a routing loop (banner exchange: Connection to UNKNOWN port -1).
   # This rule bypasses TUN/proxy entirely for ssh.exe so reconnections work.
   - PROCESS-NAME,ssh.exe,DIRECT
+  - RULE-SET,us-ai-custom,US-PROXY
   - RULE-SET,us-ai,US-PROXY
+  - RULE-SET,jp-strict-custom,JP-STRICT
   - RULE-SET,jp-strict,JP-STRICT
+  - RULE-SET,jp-content-custom,JP-PROXY
   - RULE-SET,jp-content,JP-PROXY
   - MATCH,DIRECT
 

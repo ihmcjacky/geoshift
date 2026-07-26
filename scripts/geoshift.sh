@@ -11,6 +11,7 @@ usage() {
   echo "Usage: geoshift <command>"
   echo ""
   echo "Commands (no elevated privileges required unless noted):"
+  echo "  config   Run the configuration wizard (geoshift.env, NordVPN, custom rules)"
   echo "  sync     Fetch latest config and rules from GitHub, write to config dir"
   echo "  reload   Reload Mihomo config via REST API (no restart needed)"
   echo "  status   Show running/stopped state of all GeoShift systemd services"
@@ -24,6 +25,9 @@ cmd="${1:-}"
 [[ -n "$cmd" ]] || usage
 
 case "$cmd" in
+  config)
+    exec "$GEOSHIFT_LIB/geoshift-config.sh"
+    ;;
   sync)
     exec "$GEOSHIFT_LIB/geoshift-sync.sh"
     ;;

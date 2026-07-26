@@ -130,11 +130,12 @@ if (-not $skipWintun) {
 # -- Step 4: Copy scripts -----------------------------------------------------
 info "Copying PowerShell scripts"
 $scriptSrc = Split-Path -Parent $PSCommandPath
-Copy-Item "$scriptSrc\tunnel-us.ps1"      -Destination $InstallDir -Force
-Copy-Item "$scriptSrc\tunnel-jp.ps1"      -Destination $InstallDir -Force
-Copy-Item "$scriptSrc\mihomo-run.ps1"     -Destination $InstallDir -Force
-Copy-Item "$scriptSrc\geoshift-sync.ps1"  -Destination $InstallDir -Force
-Copy-Item "$scriptSrc\geoshift.ps1"       -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\tunnel-us.ps1"        -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\tunnel-jp.ps1"        -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\mihomo-run.ps1"       -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\geoshift-sync.ps1"    -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\geoshift.ps1"         -Destination $InstallDir -Force
+Copy-Item "$scriptSrc\geoshift-config.ps1"  -Destination $InstallDir -Force
 
 # Create geoshift.bat CLI wrapper so "geoshift sync/reload" works from any prompt
 $batContent = "@echo off`r`npowershell.exe -NonInteractive -ExecutionPolicy Bypass -File `"$InstallDir\geoshift.ps1`" %*`r`n"
@@ -219,33 +220,42 @@ if (Test-Path $repoConfig) {
     Write-Host "  WARNING: no config found - copy your config/ directory to $ConfigDir" -ForegroundColor Yellow
 }
 
-# -- Step 6b: Inject NordVPN service credentials from geoshift.env ------------
-# Repo config.yaml keeps placeholders; real values live only in geoshift.env (gitignored).
-$nordUser = $null
-$nordPass = $null
-if (Test-Path $EnvFile) {
-    foreach ($line in Get-Content $EnvFile) {
-        $line = $line.Trim()
-        if ($line -match '^\s*#' -or $line -eq '') { continue }
-        if ($line -match '^NORDVPN_SERVICE_USERNAME\s*=\s*(.+)$') {
-            $candidate = $Matches[1].Trim().Trim('"')
-            if ($candidate -notmatch 'your-|YOUR_NORDVPN') { $nordUser = $candidate }
-        }
-        if ($line -match '^NORDVPN_SERVICE_PASSWORD\s*=\s*(.+)$') {
-            $candidate = $Matches[1].Trim().Trim('"')
-            if ($candidate -notmatch 'your-|YOUR_NORDVPN') { $nordPass = $candidate }
-        }
+# -- Step 6b: Apply NordVPN config from geoshift.env -------------------------
+# Dot-source the shared wizard library to get Invoke-NordVpnApply.
+$wizardScript = "$scriptSrc\geoshift-config.ps1"
+if (Test-Path $wizardScript) {
+    $Global:GeoShiftLoadFunctionsOnly = $true
+    . $wizardScript
+    $Global:GeoShiftLoadFunctionsOnly = $false
+    $cfgPath = Join-Path $ConfigDir 'config.yaml'
+    if (Test-Path $cfgPath) {
+        info "Applying NordVPN settings"
+        Invoke-NordVpnApply -ConfigYaml $cfgPath
     }
+} else {
+    Write-Host "  WARNING: geoshift-config.ps1 not found, skipping NordVPN apply" -ForegroundColor Yellow
 }
-$cfgPath = Join-Path $ConfigDir 'config.yaml'
-if ($nordUser -and $nordPass -and (Test-Path $cfgPath)) {
-    $cfg = Get-Content $cfgPath -Raw
-    $cfg = $cfg.Replace('YOUR_NORDVPN_SERVICE_USERNAME', $nordUser)
-    $cfg = $cfg.Replace('YOUR_NORDVPN_SERVICE_PASSWORD', $nordPass)
-    [System.IO.File]::WriteAllText($cfgPath, $cfg)
-    Write-Host "  Injected NordVPN service credentials from geoshift.env"
-} elseif (Test-Path $cfgPath) {
-    Write-Host "  NordVPN placeholders left in config.yaml - set NORDVPN_SERVICE_* in geoshift.env and re-run install.ps1" -ForegroundColor Yellow
+
+# -- Step 6c: Ensure custom rule overlay files exist ----------------------
+info "Ensuring custom rule overlay files"
+$rulesDir = Join-Path $ConfigDir 'rules'
+$customFiles = @(
+    @{ Path = "$rulesDir\us-ai-custom.yaml";     Group = 'US-PROXY';  Category = 'us-ai' },
+    @{ Path = "$rulesDir\jp-strict-custom.yaml"; Group = 'JP-STRICT'; Category = 'jp-strict' },
+    @{ Path = "$rulesDir\jp-content-custom.yaml";Group = 'JP-PROXY';  Category = 'jp-content' }
+)
+foreach ($cf in $customFiles) {
+    if (-not (Test-Path $cf.Path)) {
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllLines($cf.Path, [string[]]@(
+            "# GeoShift custom rules (user-managed). NOT overwritten by 'geoshift sync'.",
+            "# Routed to $($cf.Group) alongside repo-managed $($cf.Category).yaml.",
+            'payload: []'
+        ), $utf8NoBom)
+        Write-Host "  Created $($cf.Path)"
+    } else {
+        Write-Host "  $($cf.Path) already exists, not overwriting"
+    }
 }
 
 # -- Step 7: Register Task Scheduler tasks ------------------------------------
@@ -321,6 +331,16 @@ if (Test-Path "$ConfigDir\config.yaml") {
         die "mihomo -t failed - fix config.yaml before proceeding"
     }
     Write-Host "  Config OK"
+}
+
+# -- Step 9: Optional config wizard ------------------------------------------
+Write-Host ""
+$runWizard = Read-Host "Run the GeoShift config wizard now? [Y/n]"
+if ($runWizard -notmatch '^[Nn]') {
+    $installedWizard = "$InstallDir\geoshift-config.ps1"
+    $srcWizard       = "$scriptSrc\geoshift-config.ps1"
+    $wizardToRun     = if (Test-Path $installedWizard) { $installedWizard } else { $srcWizard }
+    & powershell.exe -ExecutionPolicy Bypass -File $wizardToRun full
 }
 
 # -- Done ---------------------------------------------------------------------

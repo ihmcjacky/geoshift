@@ -33,11 +33,12 @@ sudo setcap cap_net_admin,cap_net_bind_service+ep "$MIHOMO_INSTALL"
 
 echo "==> GeoShift lib + env file"
 sudo install -d -m 0755 /usr/local/lib/geoshift
-sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh"     /usr/local/lib/geoshift/tunnel-us.sh
-sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-jp.sh"     /usr/local/lib/geoshift/tunnel-jp.sh
-sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh"    /usr/local/lib/geoshift/mihomo-run.sh
-sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-sync.sh" /usr/local/lib/geoshift/geoshift-sync.sh
-sudo install -m 0755 "$REPO_ROOT/scripts/geoshift.sh"      /usr/local/bin/geoshift
+sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-us.sh"       /usr/local/lib/geoshift/tunnel-us.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/tunnel-jp.sh"       /usr/local/lib/geoshift/tunnel-jp.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/mihomo-run.sh"      /usr/local/lib/geoshift/mihomo-run.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-sync.sh"   /usr/local/lib/geoshift/geoshift-sync.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift-config.sh" /usr/local/lib/geoshift/geoshift-config.sh
+sudo install -m 0755 "$REPO_ROOT/scripts/geoshift.sh"        /usr/local/bin/geoshift
 sudo install -d -m 0755 /etc/geoshift
 
 # Migrate a legacy symlink to a real file so /etc/geoshift/ has no repo dependency
@@ -79,45 +80,34 @@ for f in "$REPO_ROOT"/config/rules/*.yaml "$REPO_ROOT"/config/rules/*.txt; do
 done
 sudo chown -R "$(whoami):$(whoami)" /etc/geoshift/config
 
-# Inject NordVPN service credentials from geoshift.env (repo config keeps placeholders).
-echo "==> NordVPN credentials"
-ENV_FILE="/etc/geoshift/geoshift.env"
+# Apply NordVPN config from geoshift.env via shared wizard library.
+echo "==> Applying NordVPN settings"
+GEOSHIFT_ENV_FILE="/etc/geoshift/geoshift.env"
 CFG="/etc/geoshift/config/config.yaml"
-nord_user=""
-nord_pass=""
-if [[ -f "$ENV_FILE" ]]; then
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-    [[ -z "$line" || "$line" == \#* ]] && continue
-    if [[ "$line" =~ ^NORDVPN_SERVICE_USERNAME[[:space:]]*=[[:space:]]*(.+)$ ]]; then
-      candidate="${BASH_REMATCH[1]}"
-      candidate="${candidate%\"}"; candidate="${candidate#\"}"
-      [[ ! "$candidate" =~ your-|YOUR_NORDVPN ]] && nord_user="$candidate"
-    fi
-    if [[ "$line" =~ ^NORDVPN_SERVICE_PASSWORD[[:space:]]*=[[:space:]]*(.+)$ ]]; then
-      candidate="${BASH_REMATCH[1]}"
-      candidate="${candidate%\"}"; candidate="${candidate#\"}"
-      [[ ! "$candidate" =~ your-|YOUR_NORDVPN ]] && nord_pass="$candidate"
-    fi
-  done < "$ENV_FILE"
+_SOURCED_FOR_SYNC=1 source "$REPO_ROOT/scripts/geoshift-config.sh" || true
+unset _SOURCED_FOR_SYNC
+if [[ -f "$CFG" ]]; then
+  set_nordvpn_config "$CFG"
 fi
-if [[ -n "$nord_user" && -n "$nord_pass" && -f "$CFG" ]]; then
-  tmp="$(mktemp)"
-  python3 - "$CFG" "$tmp" "$nord_user" "$nord_pass" <<'PY'
-import sys
-src, dst, user, password = sys.argv[1:5]
-text = open(src, encoding="utf-8").read()
-text = text.replace("YOUR_NORDVPN_SERVICE_USERNAME", user)
-text = text.replace("YOUR_NORDVPN_SERVICE_PASSWORD", password)
-open(dst, "w", encoding="utf-8", newline="\n").write(text)
-PY
-  sudo mv "$tmp" "$CFG"
-  sudo chown "$(whoami):$(whoami)" "$CFG"
-  echo "  Injected NordVPN service credentials from geoshift.env"
-elif [[ -f "$CFG" ]]; then
-  echo "  WARNING: NordVPN placeholders left in config.yaml - set NORDVPN_SERVICE_* in geoshift.env and re-run install.sh"
-fi
+
+echo "==> Ensuring custom rule overlay files"
+RULES_DIR="/etc/geoshift/config/rules"
+for entry in "us-ai:US-PROXY" "jp-strict:JP-STRICT" "jp-content:JP-PROXY"; do
+  name="${entry%%:*}"
+  group="${entry##*:}"
+  custom_file="$RULES_DIR/${name}-custom.yaml"
+  if [[ ! -f "$custom_file" ]]; then
+    {
+      echo "# GeoShift custom rules (user-managed). NOT overwritten by 'geoshift sync'."
+      echo "# Routed to $group alongside repo-managed ${name}.yaml."
+      echo "payload: []"
+    } | sudo tee "$custom_file" > /dev/null
+    sudo chown "$(whoami):$(whoami)" "$custom_file"
+    echo "  Created $custom_file"
+  else
+    echo "  $custom_file already exists, not overwriting"
+  fi
+done
 
 # Ensure GEOSHIFT_CONFIG_DIR points at the deployed path (not the repo)
 if grep -q '^GEOSHIFT_CONFIG_DIR=' /etc/geoshift/geoshift.env 2>/dev/null; then
@@ -131,6 +121,12 @@ echo "==> Validate Mihomo config"
 if ! "$MIHOMO_INSTALL" -t -d /etc/geoshift/config >/dev/null; then
   "$MIHOMO_INSTALL" -t -d /etc/geoshift/config || true
   die "mihomo -t failed"
+fi
+
+echo
+read -r -p "Run the GeoShift config wizard now? [Y/n] " _run_wizard
+if ! echo "$_run_wizard" | grep -qiE '^n'; then
+  bash /usr/local/lib/geoshift/geoshift-config.sh full
 fi
 
 echo
