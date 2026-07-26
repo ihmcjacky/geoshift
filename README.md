@@ -14,7 +14,7 @@
 6. [Why TUN Mode Closes the Gap](#6-why-tun-mode-closes-the-gap)
 7. [Component Responsibilities](#7-component-responsibilities)
 8. [Task Breakdown](#8-task-breakdown)
-9. [Applying Rule Updates (Without Restarting Tunnels)](#9-applying-rule-updates-without-restarting-tunnels)
+9. [Applying Rule Updates (Without Restarting Tunnels)](#9-applying-rule-updates-without-restarting-tunnels) *(subsections: sync, manual commands, adding a domain, restart matrix, verifying reload, config wizard, custom rule overlays, NordVPN JP proxy)*
 10. [Limitations & Known Constraints](#10-limitations--known-constraints)
 11. [Phase 2 — Windows Platform](#11-phase-2--windows-platform) *(subsections: installation, fix-windows.ps1 for existing installs, verification, troubleshooting)*
 
@@ -624,6 +624,7 @@ The `geoshift` CLI provides two commands for manual control:
 |---|---|
 | `geoshift sync` | Downloads latest `config.yaml` and `*.yaml`/`*.txt` rule files from GitHub into the deployed config directory |
 | `geoshift reload` | Signals Mihomo to re-read config and rules from disk (via `PUT /configs?force=true` API). Falls back to `systemctl restart` if Mihomo API is unreachable. |
+| `geoshift config` | Opens the interactive configuration wizard — update SSH/server settings, NordVPN proxy, or custom domain rules at any time (Windows only) |
 
 **Linux:**
 
@@ -646,11 +647,17 @@ Mihomo reload takes under 2 seconds. Active SSH tunnels on ports 1080/1081 are u
 
 ### 9.3 Adding a domain to the rule list
 
+**Option A — commit to the repo (shared across all devices):**
+
 1. Edit `config/rules/jp-content.yaml` or `config/rules/us-ai.yaml` — add a `- DOMAIN-SUFFIX,example.com` line under `payload:`
 2. Commit and push
 3. On each device: `geoshift sync && geoshift reload`
 
 No changes to `config/config.yaml` are needed. The proxy target (`JP-PROXY` / `US-PROXY`) is set once in `config.yaml` via `RULE-SET` references.
+
+**Option B — add to your local custom overlay (Windows; survives `geoshift sync`):**
+
+Run `geoshift config` and choose option 3 (Custom domain rules). Domains you add here are written to `*-custom.yaml` files that `geoshift sync` never touches. See §9.7 for the full overlay model.
 
 ### 9.4 What needs restarting for each type of change
 
@@ -671,6 +678,72 @@ After reloading Mihomo, open the dashboard at `http://127.0.0.1:9090/ui` and che
 curl -s --proxy socks5h://127.0.0.1:1081 https://api.ipify.org   # should show JP Lightsail IP
 curl -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org   # should show US Lightsail IP
 ```
+
+### 9.6 Configuration wizard (`geoshift config`) — Windows
+
+Run `geoshift config` at any time from any PowerShell prompt to open the interactive menu:
+
+| Option | What it does |
+|---|---|
+| 1) Server & SSH settings | Update `US_HOST`, `JP_HOST`, `SSH_USER`, key paths in `geoshift.env`; re-applies SSH key ACL for SYSTEM |
+| 2) NordVPN proxy | Enable/disable NordVPN JP proxy; set service credentials and endpoint in `geoshift.env`; applies settings to the deployed `config.yaml` immediately and validates with `mihomo -t` |
+| 3) Custom domain rules | Add domains to `*-custom.yaml` overlays via quick-add prompt or direct file edit; see §9.7 |
+| 4) Full wizard (1 to 3) | Runs all three sections in sequence |
+| 5) Open geoshift.env | Opens the env file in Notepad for any manual edits |
+| 6) Open config.yaml | Opens the deployed `config.yaml` in Notepad |
+
+After any change that modifies `config.yaml`, the wizard validates with `mihomo -t` and offers to run `geoshift reload`.
+
+The wizard is also offered at the end of every `install.ps1` run. During a **fresh install**, accepting is the primary path for setting IPs, SSH keys, and NordVPN credentials. During an **update**, skipping is usually fine — `geoshift.env` is preserved automatically and credentials are re-applied from it.
+
+### 9.7 Custom domain rule overlays (`*-custom.yaml`) — Windows
+
+Each rule category has a user-managed overlay file that lives alongside the repo-managed default:
+
+| Category | Repo-managed | Your overlay | Proxy group |
+|---|---|---|---|
+| US AI services | `us-ai.yaml` | `us-ai-custom.yaml` | US-PROXY (US-TUNNEL) |
+| JP strict (Abema-class) | `jp-strict.yaml` | `jp-strict-custom.yaml` | JP-STRICT (NordVPN-JP) |
+| JP general content | `jp-content.yaml` | `jp-content-custom.yaml` | JP-PROXY (JP-TUNNEL) |
+
+Key properties:
+
+- Custom rules are evaluated **before** the repo defaults in `config.yaml` — your entries win on any conflict.
+- `geoshift sync` **never touches** `*-custom.yaml` files. Only the repo-managed defaults are updated.
+- The `*-custom` rule-provider entries are part of the committed `config.yaml`, so they are always active alongside the updated defaults.
+
+**Adding domains via the wizard:**
+
+```powershell
+geoshift config   # choose option 3
+# Quick-add: type a bare domain (example.com -> DOMAIN-SUFFIX,example.com)
+# Or:        type a full rule   (DOMAIN,api.example.com)
+# Or:        choose 'e' to open the file directly in Notepad
+```
+
+**Adding domains directly:**
+
+Edit `C:\ProgramData\GeoShift\config\rules\us-ai-custom.yaml` (or the jp-strict/jp-content variant), add a `- DOMAIN-SUFFIX,example.com` line under `payload:`, then run `geoshift reload`.
+
+### 9.8 NordVPN JP proxy (`JP-STRICT` group) — Windows
+
+Some Japanese sites (Abema TV, NicoNico Live, DMM TV) layer **IP reputation checks** on top of geolocation — they block known cloud/datacenter ASNs even when the exit IP is in Japan. GeoShift's `JP-STRICT` proxy group routes these sites through a NordVPN HTTPS JP proxy to bypass this. See §10 "IP Reputation Blocking" for background.
+
+**env vars (stored in `C:\ProgramData\GeoShift\geoshift.env`):**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NORDVPN_ENABLED` | `false` | Set to `true` to activate NordVPN JP routing |
+| `NORDVPN_PROXY_SERVER` | `jp874.proxy.nordvpn.com` | NordVPN JP HTTPS proxy hostname |
+| `NORDVPN_PROXY_PORT` | `89` | NordVPN HTTPS proxy port |
+| `NORDVPN_SERVICE_USERNAME` | _(empty)_ | NordVPN service credential username |
+| `NORDVPN_SERVICE_PASSWORD` | _(empty)_ | NordVPN service credential password |
+
+> **Service credentials** are not your NordVPN login password. Get them from `nordaccount.com -> NordVPN -> Set up NordVPN manually -> Service credentials`.
+
+**No NordVPN subscription?** Leave `NORDVPN_ENABLED=false` (the default). `JP-STRICT` sites fall back to `JP-TUNNEL` (the same AWS/cloud JP exit as `JP-PROXY`). Abema and similar sites may still block you via the datacenter IP check, but all other routing is unaffected. Enable NordVPN later at any time — run `geoshift config` and choose option 2.
+
+**When enabled**, each `geoshift sync` re-applies your credentials from `geoshift.env` into the deployed `config.yaml`. Credentials never enter the repo.
 
 ---
 
@@ -749,6 +822,8 @@ Start-ScheduledTask -TaskName GeoShift-Mihomo
 
 ### IP Reputation Blocking — Services Beyond Geolocation
 
+> **Built-in solution available on Windows:** GeoShift's `JP-STRICT` proxy group routes Abema-class sites through a NordVPN HTTPS JP proxy, which uses residential IPs that pass reputation checks. Configure it with `geoshift config` (option 2). See §9.8 for details.
+
 Some Japanese and international streaming services (e.g. **DMM TV**, **NicoNico**) layer IP reputation checks **on top of** geolocation. The service detects:
 
 1. **Datacenter/cloud IP ranges** — ASNs like `AS16509 Amazon.com` are explicitly blacklisted
@@ -769,7 +844,7 @@ If the `org` field shows a **major cloud provider** (AWS, Google Cloud, Azure, e
 |---|---|---|---|
 | **Japanese domestic VPS** (Sakura Internet, ConoHa) | ¥500–1000/month (~$3–7 USD) | Uses Japanese domestic ISP ASNs; excellent streaming reputation | Requires purchasing and configuring new instance |
 | **Oracle Cloud free tier** (Tokyo) | ¥0/month | Always-free tier; worth trying first | May still be flagged as cloud (Oracle ASN); less certain than domestic VPS |
-| **Keep paid VPN for affected services** (e.g. NordVPN Tokyo) | VPN subscription | Known to work; no infrastructure to maintain | Not integrated into GeoShift; manual switching per site |
+| **NordVPN JP proxy via `JP-STRICT` group** (built-in, Windows) | NordVPN subscription | Integrated — configure once with `geoshift config`; no manual switching | Windows only; NordVPN HTTPS proxy, not full VPN tunnel |
 | **Other cloud providers** (Vultr, DigitalOcean, Linode) | $2.50–6/month | Cheaper than domestic VPS | Still cloud IPs; hit-or-miss with strict services like DMM |
 
 **Switching exit nodes:** If you choose a new Tokyo instance, update two lines in `geoshift.env` and restart the JP tunnel — no other configuration changes needed:
@@ -1246,4 +1321,4 @@ Disable-ScheduledTask -TaskName GeoShift-Tunnel-JP
 
 ---
 
-*Last updated: May 2026 (proxy nodes renamed to vendor-neutral US-TUNNEL/JP-TUNNEL; JP tunnel migrated from AWS Lightsail to Oracle Cloud; Linux config deployment aligned with Windows — Mihomo now reads from /etc/geoshift/config/ instead of the repo working tree; geoshift sync now also fetches config.yaml on both platforms.)*
+*Last updated: July 2026 (proxy nodes renamed to vendor-neutral US-TUNNEL/JP-TUNNEL; JP tunnel migrated from AWS Lightsail to Oracle Cloud; Linux config deployment aligned with Windows — Mihomo now reads from /etc/geoshift/config/ instead of the repo working tree; geoshift sync now also fetches config.yaml on both platforms; added geoshift config wizard, *-custom.yaml user overlay model for domain rules that survive geoshift sync, and built-in NordVPN JP proxy integration for JP-STRICT group to bypass datacenter IP reputation blocks.)*
