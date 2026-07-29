@@ -4,6 +4,85 @@
 
 ---
 
+## Quick Start (Windows)
+
+> For full background, architecture, and Linux setup see the sections below. This section gets a Windows machine running from zero.
+
+### What you need before starting
+
+| Requirement | Notes |
+|---|---|
+| Two AWS Lightsail instances | One in **US** region, one in **JP** (Tokyo). Both need a **static IPv4** and TCP 22 open. |
+| SSH `.pem` keys | One per instance. Keep them somewhere permanent (e.g. `C:\Users\you\.ssh\`). |
+| OpenSSH Client feature | Settings → Apps → Optional Features → **OpenSSH Client** (ships with Windows 10/11). |
+| NordVPN subscription | **Optional.** Only needed for strict JP sites (Abema TV). Skip if you don't have one. |
+
+### Step 1 — Install
+
+Open PowerShell **as Administrator**, then:
+
+```powershell
+git clone https://github.com/ihmcjacky/geoshift.git
+cd geoshift
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+`install.ps1` downloads Mihomo, registers three Task Scheduler tasks (US tunnel, JP tunnel, Mihomo), and deploys config files to `C:\ProgramData\GeoShift\`.
+
+### Step 2 — Run the configuration wizard
+
+At the end of install, answer **Y** to open the wizard. Work through all three sections:
+
+| Section | What to fill in |
+|---|---|
+| 1) Server & SSH settings | Your US and JP Lightsail IPs, SSH username (`ubuntu`), path to each `.pem` key |
+| 2) NordVPN proxy | Skip with **N** if you have no subscription; otherwise enter service credentials |
+| 3) Custom domain rules | Skip for now — add personal domains later via `geoshift config` |
+
+> You can re-open the wizard at any time with **`geoshift config`**.
+
+### Step 3 — Start the services
+
+Reboot, or start the tasks manually:
+
+```powershell
+Start-ScheduledTask -TaskName GeoShift-Tunnel-US
+Start-ScheduledTask -TaskName GeoShift-Tunnel-JP
+Start-ScheduledTask -TaskName GeoShift-Mihomo
+```
+
+### Step 4 — Verify
+
+```powershell
+# US tunnel: should return your US Lightsail IP
+curl.exe -s --proxy socks5h://127.0.0.1:1080 https://api.ipify.org
+
+# JP tunnel: should return your JP Lightsail IP
+curl.exe -s --proxy socks5h://127.0.0.1:1081 https://api.ipify.org
+
+# Mihomo TUN: open claude.ai in Chrome — it should load without geo-block
+```
+
+### Day-to-day commands
+
+| Command | When to use |
+|---|---|
+| `geoshift sync` | After a `git pull` — fetches latest rules from GitHub |
+| `geoshift reload` | After editing rules manually — hot-reloads Mihomo without restarting tunnels |
+| `geoshift config` | Change IPs, SSH keys, NordVPN settings, or add custom domain rules |
+
+### Adding a domain that isn't routing correctly
+
+```powershell
+geoshift config   # choose option 3 (Custom domain rules)
+# Type: example.com   -> adds DOMAIN-SUFFIX,example.com to us-ai-custom.yaml
+# Then the wizard offers to reload Mihomo automatically
+```
+
+Or commit the domain to `config/rules/us-ai.yaml` (or `jp-content.yaml` for JP sites) and push — all devices pick it up on the next `geoshift sync`.
+
+---
+
 ## Table of Contents
 
 1. [Problem Statement](#1-problem-statement)

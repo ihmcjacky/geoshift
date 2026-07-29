@@ -14,3 +14,9 @@ config/cache.db
 config/ui/
 
 *.pem
+
+# AI coding assistant local config — machine-local, not portable
+.claude/
+
+# MCP server plugin configs — local tooling data
+mcps/
