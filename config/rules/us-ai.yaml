@@ -34,6 +34,22 @@ payload:
   - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com
   - DOMAIN-SUFFIX,deepmind.com
   - DOMAIN-SUFFIX,deepmind.google
+  # Google shared session/auth/static infra used by the Gemini web app.
+  # Without these, the page's own auth/telemetry/asset requests fall through
+  # to MATCH,DIRECT (real HK IP) while gemini.google.com / generativelanguage.googleapis.com
+  # go through US-PROXY -> Google sees two different source IPs for the same
+  # session and blocks it as "unusual traffic" / IP mismatch.
+  - DOMAIN-SUFFIX,accounts.google.com
+  - DOMAIN-SUFFIX,accounts.youtube.com
+  - DOMAIN-SUFFIX,myaccount.google.com
+  - DOMAIN-SUFFIX,ogs.google.com
+  - DOMAIN-SUFFIX,apis.google.com
+  - DOMAIN-SUFFIX,play.google.com
+  - DOMAIN-SUFFIX,googleapis.com
+  - DOMAIN-SUFFIX,gstatic.com
+  - DOMAIN-SUFFIX,googleusercontent.com
+  - DOMAIN,google.com
+  - DOMAIN,www.google.com
   - DOMAIN-SUFFIX,shudder.com
   # Shudder infrastructure: backend runs on DICE/imggaming platform; geo-check via OneTrust
   - DOMAIN-SUFFIX,imggaming.com
