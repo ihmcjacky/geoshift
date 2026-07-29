@@ -50,6 +50,19 @@ payload:
   - DOMAIN-SUFFIX,googleusercontent.com
   - DOMAIN,google.com
   - DOMAIN,www.google.com
+  # Cursor IDE - api/auth/marketplace/download backends (per cursor.com/docs/enterprise/network-configuration).
+  # Cursor was silently dropping Claude models from the model list; same IP-mismatch
+  # pattern as Gemini above - IDE traffic (api*.cursor.sh) must not fall through to DIRECT
+  # while account auth (authenticate.cursor.sh, cursor.com login) does.
+  # DOMAIN-SUFFIX already matches all subdomains, so this also covers:
+  #   api2-5.cursor.sh, repo42.cursor.sh, *.gcpp.cursor.sh, agent*.api5.cursor.sh,
+  #   authenticate(or).cursor.sh, prod.authentication.cursor.sh, adminportal42.cursor.sh
+  - DOMAIN-SUFFIX,cursor.sh
+  - DOMAIN-SUFFIX,cursor-cdn.com
+  - DOMAIN-SUFFIX,cursorapi.com
+  - DOMAIN-SUFFIX,cursorvm.com
+  - DOMAIN-SUFFIX,cursor.com
+  - DOMAIN,anysphere-binaries.s3.us-east-1.amazonaws.com
   - DOMAIN-SUFFIX,shudder.com
   # Shudder infrastructure: backend runs on DICE/imggaming platform; geo-check via OneTrust
   - DOMAIN-SUFFIX,imggaming.com
