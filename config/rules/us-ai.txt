@@ -81,3 +81,4 @@ DOMAIN-SUFFIX,gitlab.io
 DOMAIN-SUFFIX,gitlab.net
 DOMAIN-SUFFIX,gitlab-static.net
 DOMAIN-SUFFIX,gitlabusercontent.com
+DOMAIN-SUFFIX,opencode.ai

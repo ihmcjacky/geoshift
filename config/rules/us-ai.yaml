@@ -99,6 +99,11 @@ payload:
   - DOMAIN-SUFFIX,gitlab.net
   - DOMAIN-SUFFIX,gitlab-static.net
   - DOMAIN-SUFFIX,gitlabusercontent.com
+  # OpenCode CLI - "OpenCode Go" / Zen model gateway (opencode.ai/zen/go/v1) proxies
+  # to upstream model providers (e.g. GPT-5.6). Gateway geo-checks the source IP;
+  # from HK this 403s with "This model is not available in your region", so the
+  # opencode.ai gateway traffic itself must go out via US-PROXY.
+  - DOMAIN-SUFFIX,opencode.ai
   # TikTok - core domains
   - DOMAIN-SUFFIX,tiktok.com
   - DOMAIN-SUFFIX,tiktokv.com
