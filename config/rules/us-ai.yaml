@@ -19,37 +19,62 @@ payload:
   - DOMAIN-SUFFIX,oaistatic.com
   - DOMAIN-SUFFIX,oaiusercontent.com
   - DOMAIN-SUFFIX,openaiapi-site.azureedge.net
-  - DOMAIN-SUFFIX,ai.google.dev
+  # === Google - AI services ONLY ==============================================
+  # Scope is deliberate: only Google's AI product endpoints go through US-PROXY.
+  # Shared Google session/auth/static infra stays on MATCH,DIRECT (real HK IP):
+  #   accounts.google.com, myaccount.google.com, ogs.google.com, apis.google.com,
+  #   play.google.com, clients6.google.com, gstatic.com, googleusercontent.com,
+  #   google.com (Search), and the blanket googleapis.com.
+  #
+  # Why those were REMOVED from this list (they used to be here):
+  # Every Google product shares that infra. Pinning it to US-PROXY meant opening
+  # Gmail/Drive/YouTube pulled page assets, the account bar, the avatar and the
+  # session check from the Oracle US datacenter IP while the product itself came
+  # from HK - one page load, two source IPs. It also made a Hong Kong account
+  # authenticate from a cloud datacenter IP, which is itself a strong abuse signal.
+  # That combination is what tripped Google's "unusual traffic" / abnormal-activity
+  # checks. Auth now exits on the real HK IP, matching the account's own history.
+  #
+  # IMPORTANT: the *-pa.googleapis.com entries below are NOT redundant. The blanket
+  # DOMAIN-SUFFIX,googleapis.com rule was removed on purpose (it also dragged the
+  # Drive / Maps / YouTube / Play APIs through the US), so every AI backend that
+  # still needs a US exit has to be named explicitly here.
+  #
+  # Trade-off to know: if Gemini or AI Studio ever challenges sign-in after this,
+  # the single line to add back is  - DOMAIN-SUFFIX,accounts.google.com
+  # (that restores US auth, at the cost of the abnormal-activity flag returning).
+
+  # Gemini / AI Studio / NotebookLM / Labs web apps
   - DOMAIN-SUFFIX,gemini.google.com
   - DOMAIN-SUFFIX,aistudio.google.com
   - DOMAIN-SUFFIX,notebooklm.google
   - DOMAIN-SUFFIX,notebooklm.google.com
-  - DOMAIN-SUFFIX,discoveryengine.googleapis.com
-  - DOMAIN-SUFFIX,oauth2.googleapis.com
-  - DOMAIN-SUFFIX,cloudcode-pa.googleapis.com
-  - DOMAIN-SUFFIX,clients6.google.com
-  - DOMAIN-SUFFIX,generativelanguage.googleapis.com
-  - DOMAIN-SUFFIX,aisandbox-pa.googleapis.com
-  - DOMAIN-SUFFIX,aiplatform.googleapis.com
-  - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com
+  - DOMAIN-SUFFIX,labs.google
+  - DOMAIN-SUFFIX,ai.google.dev
   - DOMAIN-SUFFIX,deepmind.com
   - DOMAIN-SUFFIX,deepmind.google
-  # Google shared session/auth/static infra used by the Gemini web app.
-  # Without these, the page's own auth/telemetry/asset requests fall through
-  # to MATCH,DIRECT (real HK IP) while gemini.google.com / generativelanguage.googleapis.com
-  # go through US-PROXY -> Google sees two different source IPs for the same
-  # session and blocks it as "unusual traffic" / IP mismatch.
-  - DOMAIN-SUFFIX,accounts.google.com
-  - DOMAIN-SUFFIX,accounts.youtube.com
-  - DOMAIN-SUFFIX,myaccount.google.com
-  - DOMAIN-SUFFIX,ogs.google.com
-  - DOMAIN-SUFFIX,apis.google.com
-  - DOMAIN-SUFFIX,play.google.com
-  - DOMAIN-SUFFIX,googleapis.com
-  - DOMAIN-SUFFIX,gstatic.com
-  - DOMAIN-SUFFIX,googleusercontent.com
-  - DOMAIN,google.com
-  - DOMAIN,www.google.com
+  # Antigravity (Google's agentic IDE). Talks to cloudcode-pa.googleapis.com and the
+  # daily-cloudcode-pa.sandbox.googleapis.com internal endpoint; gvt1.com serves the
+  # IDE / extension binary downloads.
+  - DOMAIN-SUFFIX,antigravity.google
+  - DOMAIN-SUFFIX,cloudcode-pa.googleapis.com
+  - DOMAIN-SUFFIX,sandbox.googleapis.com
+  - DOMAIN-SUFFIX,gvt1.com
+  # Gemini / AI Studio / Vertex AI backends
+  - DOMAIN-SUFFIX,generativelanguage.googleapis.com
+  - DOMAIN-SUFFIX,aisandbox-pa.googleapis.com
+  - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com
+  - DOMAIN-SUFFIX,aiplatform.googleapis.com
+  - DOMAIN-SUFFIX,discoveryengine.googleapis.com
+  # OAuth token endpoint - kept on US so token refresh for the AI CLI/IDE tools
+  # (Antigravity, gemini-cli) exits the same side as their API calls. This is a
+  # machine token endpoint and carries no browsing session identity, unlike
+  # accounts.google.com, so it does not re-introduce the mismatch above.
+  - DOMAIN-SUFFIX,oauth2.googleapis.com
+  # AI Studio backend lives on a single host under the shared clients6.google.com.
+  # DOMAIN (exact) not DOMAIN-SUFFIX, so the rest of clients6 stays DIRECT.
+  - DOMAIN,alkalimakersuite-pa.clients6.google.com
+  # === end Google =============================================================
   # Cursor IDE - api/auth/marketplace/download backends (per cursor.com/docs/enterprise/network-configuration).
   # Cursor was silently dropping Claude models from the model list; same IP-mismatch
   # pattern as Gemini above - IDE traffic (api*.cursor.sh) must not fall through to DIRECT

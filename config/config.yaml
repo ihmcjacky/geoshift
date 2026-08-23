@@ -64,10 +64,18 @@ proxies:
     udp: false
 
 proxy-groups:
+  # Default exit is US-TUNNEL for normal chatgpt.com/openai.com use.
+  # The Revolut x ChatGPT Go redemption offer excludes the US (and Brazil) - claiming it
+  # while chatgpt.com routes through US-TUNNEL fails with "account not in eligible region"
+  # even though the account works fine for normal use. To claim: switch this group to
+  # JP-TUNNEL via the dashboard (http://127.0.0.1:9090/ui) or
+  #   curl -X PUT http://127.0.0.1:9090/proxies/US-PROXY -d "{\"name\":\"JP-TUNNEL\"}"
+  # complete the redemption, then switch back to US-TUNNEL for daily use.
   - name: US-PROXY
     type: select
     proxies:
       - US-TUNNEL
+      - JP-TUNNEL
       - DIRECT
   - name: JP-PROXY
     type: select
