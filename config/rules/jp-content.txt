@@ -21,3 +21,10 @@ DOMAIN-SUFFIX,ideapockets.com
 DOMAIN-SUFFIX,faleno.jp
 DOMAIN-SUFFIX,justwatch.com
 DOMAIN-SUFFIX,imagedelivery.net
+DOMAIN-SUFFIX,github.com
+DOMAIN-SUFFIX,githubusercontent.com
+DOMAIN-SUFFIX,githubassets.com
+DOMAIN-SUFFIX,githubapp.com
+DOMAIN-SUFFIX,github.io
+DOMAIN-SUFFIX,ghcr.io
+DOMAIN,github-cloud.s3.amazonaws.com

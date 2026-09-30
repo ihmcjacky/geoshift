@@ -27,3 +27,14 @@ payload:
   - DOMAIN-SUFFIX,faleno.jp
   - DOMAIN-SUFFIX,justwatch.com
   - DOMAIN-SUFFIX,imagedelivery.net
+  # GitHub - downloads from HK are flaky (release assets, archives, raw files, ghcr images),
+  # so all GitHub traffic exits via the JP tunnel. Not geo-locked; this is for stability only.
+  # github.com covers api./codeload./gist./uploads./npm.pkg.; githubusercontent.com covers
+  # raw./objects./release-assets./avatars./camo.; github-cloud.s3 is the legacy release/LFS host.
+  - DOMAIN-SUFFIX,github.com
+  - DOMAIN-SUFFIX,githubusercontent.com
+  - DOMAIN-SUFFIX,githubassets.com
+  - DOMAIN-SUFFIX,githubapp.com
+  - DOMAIN-SUFFIX,github.io
+  - DOMAIN-SUFFIX,ghcr.io
+  - DOMAIN,github-cloud.s3.amazonaws.com
