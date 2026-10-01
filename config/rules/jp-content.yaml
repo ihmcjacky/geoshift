@@ -38,3 +38,30 @@ payload:
   - DOMAIN-SUFFIX,github.io
   - DOMAIN-SUFFIX,ghcr.io
   - DOMAIN,github-cloud.s3.amazonaws.com
+  # FANZA / DMM family - subdomains of dmm.co.jp / dmm.com are already covered above.
+  # These are the extra first-party domains the FANZA/DMM pages load: dmm.ai = API
+  # (api-gcp.dmm.ai), dmmgames.com / fanzagames-official.com = DMM GAMES / FANZA GAMES.
+  - DOMAIN-SUFFIX,dmm.ai
+  - DOMAIN-SUFFIX,dmmgames.com
+  - DOMAIN-SUFFIX,fanzagames-official.com
+  # Kanto TV stations: Tokyo key stations + independent UHF stations. Subdomains are covered
+  # (news.ntv.co.jp = NNN news, fod.fujitv.co.jp = FOD, video.tv-tokyo.co.jp = Net de Tele-Tokyo).
+  # NHK: NHK ONE lives on the .nhk brand TLD (one.nhk, web.nhk, ac1.nhk), so suffix "nhk" covers it.
+  - DOMAIN-SUFFIX,nhk
+  - DOMAIN-SUFFIX,nhk.or.jp
+  - DOMAIN-SUFFIX,nhk.jp
+  - DOMAIN-SUFFIX,nhk-ondemand.jp
+  - DOMAIN-SUFFIX,ntv.co.jp
+  - DOMAIN-SUFFIX,tv-asahi.co.jp
+  - DOMAIN-SUFFIX,telasa.jp
+  - DOMAIN-SUFFIX,tbs.co.jp
+  - DOMAIN-SUFFIX,tv-tokyo.co.jp
+  - DOMAIN-SUFFIX,txn.co.jp
+  - DOMAIN-SUFFIX,fujitv.co.jp
+  - DOMAIN-SUFFIX,fnn.jp
+  - DOMAIN-SUFFIX,mxtv.jp
+  - DOMAIN-SUFFIX,tvk-yokohama.com
+  - DOMAIN-SUFFIX,chiba-tv.com
+  - DOMAIN-SUFFIX,teletama.jp
+  - DOMAIN-SUFFIX,gtv.co.jp
+  - DOMAIN-SUFFIX,tochigi-tv.jp
