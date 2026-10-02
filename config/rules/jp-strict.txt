@@ -24,3 +24,14 @@ DOMAIN-SUFFIX,linear-abematv.akamaized.net
 DOMAIN-SUFFIX,vod-abematv.akamaized.net
 DOMAIN,d1otoma47x30pg.cloudfront.net
 DOMAIN,d2wy8f7a9ursnm.cloudfront.net
+# --- FANZA / DMM ---
+DOMAIN-SUFFIX,dmm.co.jp
+DOMAIN-SUFFIX,dmm.com
+DOMAIN-SUFFIX,fanza.com
+DOMAIN-SUFFIX,fanza.jp
+DOMAIN-SUFFIX,dmm-extension.com
+DOMAIN-SUFFIX,navismithapis.com
+DOMAIN-SUFFIX,navismithapis-cdn.com
+DOMAIN-SUFFIX,dmm.ai
+DOMAIN-SUFFIX,dmmgames.com
+DOMAIN-SUFFIX,fanzagames-official.com

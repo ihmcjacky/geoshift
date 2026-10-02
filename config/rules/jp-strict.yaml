@@ -29,3 +29,19 @@ payload:
   - DOMAIN-SUFFIX,vod-abematv.akamaized.net
   - DOMAIN,d1otoma47x30pg.cloudfront.net
   - DOMAIN,d2wy8f7a9ursnm.cloudfront.net
+  # --- FANZA / DMM ---
+  # FANZA video / DMM TV layer an IP-reputation check on top of geolocation (README "IP Reputation
+  # Blocking"; navismithapis.com is the geo-check host), so cloud exits like the Oracle JP tunnel
+  # can be rejected even from Tokyo. The whole DMM family must exit from ONE IP (the geo-check and
+  # the player/API calls are one session), so keep it together here - do not split it across
+  # jp-strict and jp-content. Subdomains (video./api.video./api.cds./tv./games.) are covered.
+  - DOMAIN-SUFFIX,dmm.co.jp
+  - DOMAIN-SUFFIX,dmm.com
+  - DOMAIN-SUFFIX,fanza.com
+  - DOMAIN-SUFFIX,fanza.jp
+  - DOMAIN-SUFFIX,dmm-extension.com
+  - DOMAIN-SUFFIX,navismithapis.com
+  - DOMAIN-SUFFIX,navismithapis-cdn.com
+  - DOMAIN-SUFFIX,dmm.ai
+  - DOMAIN-SUFFIX,dmmgames.com
+  - DOMAIN-SUFFIX,fanzagames-official.com

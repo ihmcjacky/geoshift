@@ -1,13 +1,9 @@
 # JP content rules - loaded by Mihomo rule-providers (classical behavior).
 # Proxy target (JP-PROXY) is assigned in config.yaml via RULE-SET.
-# Strict geo-lock sites (e.g. Abema) live in jp-strict.yaml -> JP-STRICT instead.
+# Strict geo-lock sites (Abema, FANZA/DMM) live in jp-strict.yaml -> JP-STRICT instead.
 # To add domains: append entries here, commit, then run "geoshift sync && geoshift reload"
 # on each device. No tunnel restart needed.
 payload:
-  - DOMAIN-SUFFIX,dmm.co.jp
-  - DOMAIN-SUFFIX,dmm.com
-  - DOMAIN-SUFFIX,fanza.com
-  - DOMAIN-SUFFIX,fanza.jp
   - DOMAIN-SUFFIX,nicovideo.jp
   - DOMAIN-SUFFIX,dmc.nico
   - DOMAIN-SUFFIX,nico.ms
@@ -17,9 +13,6 @@ payload:
   - DOMAIN-SUFFIX,tver.jp
   - DOMAIN-SUFFIX,streaks.jp
   - DOMAIN-SUFFIX,jocdn.net
-  - DOMAIN-SUFFIX,navismithapis-cdn.com
-  - DOMAIN-SUFFIX,navismithapis.com
-  - DOMAIN-SUFFIX,dmm-extension.com
   - DOMAIN-SUFFIX,inmobi.com
   - DOMAIN-SUFFIX,omappapi.com
   - DOMAIN-SUFFIX,attackers.net
@@ -38,12 +31,6 @@ payload:
   - DOMAIN-SUFFIX,github.io
   - DOMAIN-SUFFIX,ghcr.io
   - DOMAIN,github-cloud.s3.amazonaws.com
-  # FANZA / DMM family - subdomains of dmm.co.jp / dmm.com are already covered above.
-  # These are the extra first-party domains the FANZA/DMM pages load: dmm.ai = API
-  # (api-gcp.dmm.ai), dmmgames.com / fanzagames-official.com = DMM GAMES / FANZA GAMES.
-  - DOMAIN-SUFFIX,dmm.ai
-  - DOMAIN-SUFFIX,dmmgames.com
-  - DOMAIN-SUFFIX,fanzagames-official.com
   # Kanto TV stations: Tokyo key stations + independent UHF stations. Subdomains are covered
   # (news.ntv.co.jp = NNN news, fod.fujitv.co.jp = FOD, video.tv-tokyo.co.jp = Net de Tele-Tokyo).
   # NHK: NHK ONE lives on the .nhk brand TLD (one.nhk, web.nhk, ac1.nhk), so suffix "nhk" covers it.
